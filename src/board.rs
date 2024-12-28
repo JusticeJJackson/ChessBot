@@ -1,10 +1,10 @@
 pub struct Board {
-    bitboards: [u64; 12],
-    active_color: Color,
-    castling_rights: u8,       // Use a bitmask for castling rights
-    en_passant: Option<usize>, // Target square index for en passant
-    halfmove_clock: u32,
-    fullmove_number: u32,
+    pub bitboards: [u64; 12],
+    pub active_color: Color,
+    pub castling_rights: u8,       // Use a bitmask for castling rights
+    pub en_passant: Option<usize>, // Target square index for en passant
+    pub halfmove_clock: u32,
+    pub fullmove_number: u32,
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -26,6 +26,24 @@ pub enum Color {
 pub struct Piece {
     color: Color,
     piece_type: PieceType,
+}
+
+impl PieceType {
+    /// Creates a new `PieceType`
+    pub fn from(piece_type_str: String) -> Self {
+        let piece_type_str = piece_type_str.chars().next().unwrap();
+        let piece_type = match piece_type_str {
+            'p' => PieceType::Pawn,
+            'n' => PieceType::Knight,
+            'b' => PieceType::Bishop,
+            'r' => PieceType::Rook,
+            'q' => PieceType::Queen,
+            'k' => PieceType::King,
+            _ => panic!("Invalid piece type: {}", piece_type_str),
+        };
+
+        piece_type
+    }
 }
 
 #[derive(Copy, Clone)]
