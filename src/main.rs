@@ -23,6 +23,10 @@ fn main() {
 
     game_board.display();
 
+    let pawn_bitboard = game_board.bitboards[0];
+
+    Board::display_bitboard(pawn_bitboard);
+
     let m = chess_move::Move::new("e2e4".to_string());
     println!("{:?}", m);
 

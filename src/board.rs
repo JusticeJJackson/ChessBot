@@ -153,6 +153,7 @@ impl Board {
 
         squares
     }
+
     pub fn fen_to_board(fen: &str) -> Board {
         let parts: Vec<&str> = fen.split_whitespace().collect();
         assert_eq!(parts.len(), 6, "Invalid FEN string");
@@ -203,7 +204,7 @@ impl Board {
                 Square::Piece(piece) => {
                     let piece_type = piece.piece_type as usize;
                     let color = piece.color as usize;
-                    bitboards[color * 6 + piece_type] |= 1 << i;
+                    bitboards[(color * 6) + piece_type] |= 1 << i;
                 }
                 Square::Empty => (),
             }
@@ -274,11 +275,21 @@ impl Board {
         println!("Fullmove Number: {}", self.fullmove_number);
     }
 
+    pub fn display_bitboard(bitboard: u64) {
+        for i in (0..64).rev() {
+            if i % 8 == 0 {
+                println!();
+            }
+            print!("{}", if bitboard & (1 << i) != 0 { "1" } else { "0" });
+        }
+        println!();
+    }
+
     pub fn board_to_fen(&self) -> String {
         let mut fen = String::new();
 
         // Convert bitboards to a FEN position string
-        for rank in 0..8 {
+        for rank in (0..8) {
             let mut empty_count = 0;
 
             for file in 0..8 {
