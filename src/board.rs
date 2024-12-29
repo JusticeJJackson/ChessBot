@@ -1,4 +1,5 @@
 use crate::chess_move::{find_peice_at_from_location, validate_move, Move};
+use crate::utils::EDGE_DISTANCES;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Color {
@@ -600,6 +601,128 @@ impl Board {
 
         valid
     }
+
+    // Given a color, return the bitboard squares being attacked by that color
+    pub fn get_attack_bitboard_by_color(&self, color: Color) -> u64 {
+        let mut attack_bitboard: u64 = 0;
+
+        let offset = match color {
+            Color::White => 0,
+            Color::Black => 6,
+        };
+
+        let pawns_bb = self.bitboards[offset + PieceType::Pawn as usize];
+        let knights_bb = self.bitboards[offset + PieceType::Knight as usize];
+        let bishops_bb = self.bitboards[offset + PieceType::Bishop as usize];
+        let rooks_bb = self.bitboards[offset + PieceType::Rook as usize];
+        let queens_bb = self.bitboards[offset + PieceType::Queen as usize];
+        let king_bb = self.bitboards[offset + PieceType::King as usize];
+
+        let board_occupancy_bb = self.all_white_bitboard | self.all_black_bitboard;
+
+        attack_bitboard |= Self::get_pawn_attack_bitboard(pawns_bb, color);
+
+        attack_bitboard |= Self::get_knight_attack_bitboard(knights_bb);
+
+        attack_bitboard |= Self::get_bishop_attack_bitboard(bishops_bb, board_occupancy_bb);
+
+        attack_bitboard |= Self::get_rook_attack_bitboard(rooks_bb, board_occupancy_bb);
+
+        attack_bitboard |= Self::get_queen_attack_bitboard(queens_bb, board_occupancy_bb);
+
+        attack_bitboard |= Self::get_king_attack_bitboard(king_bb);
+
+        attack_bitboard
+    }
+
+    fn get_pawn_attack_bitboard(pawn_bb: u64, color: Color) -> u64 {
+        let mut attack_bitboard: u64 = 0;
+
+        match color {
+            Color::White => {
+                attack_bitboard |= (pawn_bb << 7) & !0x0101010101010101; // Capture right
+                attack_bitboard |= (pawn_bb << 9) & !0x8080808080808080; // Capture left}
+            }
+            Color::Black => {
+                attack_bitboard |= (pawn_bb >> 7) & !0x8080808080808080; // Capture right
+                attack_bitboard |= (pawn_bb >> 9) & !0x0101010101010101; // Capture left
+            }
+        }
+        attack_bitboard
+    }
+
+    fn get_knight_attack_bitboard(knight_bb: u64) -> u64 {
+        let mut attack_bitboard: u64 = 0;
+
+        attack_bitboard |= (knight_bb << 17) & !0x8080808080808080; // Knight moves
+        attack_bitboard |= (knight_bb << 15) & !0x0101010101010101;
+        attack_bitboard |= (knight_bb << 10) & !0x8080808080808080;
+        attack_bitboard |= (knight_bb << 6) & !0x0101010101010101;
+        attack_bitboard |= (knight_bb >> 17) & !0x0101010101010101;
+        attack_bitboard |= (knight_bb >> 15) & !0x8080808080808080;
+        attack_bitboard |= (knight_bb >> 10) & !0x0101010101010101;
+        attack_bitboard |= (knight_bb >> 6) & !0x8080808080808080;
+
+        attack_bitboard
+    }
+
+    fn get_bishop_attack_bitboard(bishop_bb: u64, board_occpuancy_bb: u64) -> u64 {
+        let mut attack_bitboard: u64 = 0;
+
+        // Directions: NW (+7), NE (+9), SW (-9), SE (-7)
+        let distance_to_jump: [i8; 4] = [9, 7, -7, -9]; // [NE, NW, SE, SW]
+        let dir: [u8; 4] = [4, 5, 6, 7];
+
+        for i in 0..4 {
+            let mut temp_bb = bishop_bb;
+            // Loop over every bishop to evaluate which squares they can attack
+            while temp_bb != 0 {
+                let square = temp_bb.trailing_zeros() as i8; // get the index of the first set bit aka that one of the bishops is on
+                temp_bb &= temp_bb - 1; // remove the bit we just found
+
+                let max_distance = EDGE_DISTANCES[dir[i] as usize][square as usize];
+
+                for hop_distance_multiplier in 1..=max_distance {
+                    let hop_distance = distance_to_jump[i] * hop_distance_multiplier as i8;
+
+                    let attacking_square = square + hop_distance;
+
+                    // Prevents wrapping around the board or going out of bounds
+                    if attacking_square < 0 || attacking_square > 63 {
+                        break;
+                    }
+                    let attacking_square_u8 = attacking_square as u8;
+                    let attacking_bit = 1 << attacking_square_u8;
+
+                    attack_bitboard |= attacking_bit;
+
+                    // if we hit anny peice we stop
+                    if board_occpuancy_bb & attacking_bit != 0 {
+                        break;
+                    }
+                }
+            }
+        }
+        attack_bitboard
+    }
+
+    fn get_rook_attack_bitboard(rook_bb: u64, board_occpuancy_bb: u64) -> u64 {
+        let mut attack_bitboard: u64 = 0;
+
+        attack_bitboard
+    }
+
+    fn get_queen_attack_bitboard(queen_bb: u64, board_occpuancy_bb: u64) -> u64 {
+        let mut attack_bitboard: u64 = 0;
+
+        attack_bitboard
+    }
+
+    fn get_king_attack_bitboard(king_bb: u64) -> u64 {
+        let mut attack_bitboard: u64 = 0;
+
+        attack_bitboard
+    }
 }
 
 // -------------------------------
@@ -721,5 +844,70 @@ mod tests {
 
         assert_eq!(board.all_white_bitboard, folded_white_bitboard);
         assert_eq!(board.all_black_bitboard, folded_black_bitboard);
+    }
+
+    #[test]
+    fn test_white_bishops_attacking_bitboards() {
+        let fen = "7B/8/8/8/8/8/8/8 b - - 0 1";
+
+        let board = Board::fen_to_board(&fen);
+
+        let attack_bitboard = board.get_attack_bitboard_by_color(Color::White);
+
+        let expected_attack_bitboard: u64 = 0x40201008040201;
+
+        assert_eq!(attack_bitboard, expected_attack_bitboard);
+    }
+
+    #[test]
+    fn test_black_bishops_attacking_bitboards() {
+        let fen = "7b/8/8/8/8/8/8/8 b - - 0 1";
+
+        let board = Board::fen_to_board(&fen);
+
+        let attack_bitboard = board.get_attack_bitboard_by_color(Color::Black);
+
+        let expected_attack_bitboard: u64 = 0x40201008040201;
+
+        assert_eq!(attack_bitboard, expected_attack_bitboard);
+    }
+
+    #[test]
+    fn test_white_bishop_attacking_bitboards_when_spaces_occupied() {
+        let fen = "7B/8/5p2/8/8/8/8/8 w - - 0 1";
+
+        let board = Board::fen_to_board(&fen);
+
+        let attack_bitboard = board.get_attack_bitboard_by_color(Color::White);
+
+        let expected_attack_bitboard: u64 = 1 << 54 | 1 << 45;
+
+        assert_eq!(attack_bitboard, expected_attack_bitboard);
+    }
+
+    #[test]
+    fn test_pawn_attacking_bitboards() {
+        let fen = "8/7P/8/8/8/8/8/8 w - - 0 1";
+
+        let board = Board::fen_to_board(&fen);
+
+        let attack_bitboard = board.get_attack_bitboard_by_color(Color::White);
+
+        let expected_attack_bitboard: u64 = 1 << 62;
+
+        assert_eq!(attack_bitboard, expected_attack_bitboard);
+    }
+
+    #[test]
+    fn test_pawn_attacking_bitboards_two_squares() {
+        let fen = "8/6P1/8/8/8/8/8/8 b - - 0 1";
+
+        let board = Board::fen_to_board(&fen);
+
+        let attack_bitboard = board.get_attack_bitboard_by_color(Color::White);
+
+        let expected_attack_bitboard: u64 = 1 << 61 | 1 << 63;
+
+        assert_eq!(attack_bitboard, expected_attack_bitboard);
     }
 }

@@ -3,7 +3,6 @@ use crate::board::Color;
 use crate::board::PieceType;
 use crate::utils::convert_board_coordinate_to_idx;
 use crate::utils::EDGE_DISTANCES;
-use std::collections::HashSet;
 
 // Uses UCI Notation
 #[derive(Debug, Clone)]
@@ -206,7 +205,8 @@ fn validate_bishop_move(board: &Board, m: &Move) -> bool {
 
     let moves = generate_sliding_moves(board, PieceType::Bishop, m);
 
-    if !moves.contains(&m.to) {
+    let to_bit = 1u64 << m.to;
+    if moves & to_bit == 0 {
         println!(
             "Invalid move: Bishop moving to an square not within its range {}",
             m.to
@@ -229,7 +229,8 @@ fn validate_rook_move(board: &Board, m: &Move) -> bool {
 
     let moves = generate_sliding_moves(board, PieceType::Rook, m);
 
-    if !moves.contains(&m.to) {
+    let to_bit = 1u64 << m.to;
+    if moves & to_bit == 0 {
         println!(
             "Invalid move: Bishop moving to an invalid location {}",
             m.to
@@ -250,7 +251,8 @@ fn validate_queen_move(board: &Board, m: &Move) -> bool {
 
     let moves = generate_sliding_moves(board, PieceType::Queen, m);
 
-    if !moves.contains(&m.to) {
+    let to_bit = 1u64 << m.to;
+    if moves & to_bit == 0 {
         println!("Invalid move: Queen moving to an invalid location {}", m.to);
         return false;
     }
@@ -371,8 +373,8 @@ fn validate_queen_side_castle(board: &Board, color: Color) -> bool {
     true
 }
 
-pub fn generate_sliding_moves(board: &Board, piece_type: PieceType, m: &Move) -> HashSet<u8> {
-    let mut moves = HashSet::new();
+pub fn generate_sliding_moves(board: &Board, piece_type: PieceType, m: &Move) -> u64 {
+    let mut moves = 0;
 
     let capturable_bitboards: &[u64] = match board.active_color {
         Color::White => &board.bitboards[6..11], // Last 5 bitboards for Black (Excluding King)
@@ -412,12 +414,12 @@ pub fn generate_sliding_moves(board: &Board, piece_type: PieceType, m: &Move) ->
 
                     // if the square is occupied by an enemy piece, add it to the moves set and stop
                     if capturable_bitboards.iter().any(|&bb| bb & to_bit != 0) {
-                        moves.insert(to);
+                        moves |= to_bit;
                         break;
                     }
 
                     // if the square is empty, add it to the moves set
-                    moves.insert(to);
+                    moves |= to_bit;
                 }
             }
         }
@@ -457,19 +459,19 @@ pub fn generate_sliding_moves(board: &Board, piece_type: PieceType, m: &Move) ->
 
                     // If an enemy piece occupies this square, add it as a capture and stop.
                     if capturable_bitboards.iter().any(|&bb| bb & to_bit != 0) {
-                        moves.insert(to_u8);
+                        moves |= to_bit;
                         break;
                     }
 
                     // If it's empty, add this square as a valid move and continue.
-                    moves.insert(to_u8);
+                    moves |= to_bit;
                 }
             }
         }
         PieceType::Queen => {
             // Combine Rook and Bishop moves for the Queen
-            moves.extend(generate_sliding_moves(board, PieceType::Rook, m));
-            moves.extend(generate_sliding_moves(board, PieceType::Bishop, m));
+            moves |= generate_sliding_moves(board, PieceType::Rook, m);
+            moves |= generate_sliding_moves(board, PieceType::Bishop, m);
         }
         _ => {
             println!("Invalid piece type for sliding move generation");
