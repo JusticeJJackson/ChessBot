@@ -1,3 +1,50 @@
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum Color {
+    White = 0,
+    Black = 1,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum PieceType {
+    Pawn = 0,
+    Knight = 1,
+    Bishop = 2,
+    Rook = 3,
+    Queen = 4,
+    King = 5,
+}
+
+impl PieceType {
+    /// Creates a new `PieceType`
+    pub fn from(piece_type_str: String) -> Self {
+        let piece_type_str = piece_type_str.chars().next().unwrap();
+        let piece_type = match piece_type_str {
+            'p' => PieceType::Pawn,
+            'n' => PieceType::Knight,
+            'b' => PieceType::Bishop,
+            'r' => PieceType::Rook,
+            'q' => PieceType::Queen,
+            'k' => PieceType::King,
+            _ => panic!("Invalid piece type: {}", piece_type_str),
+        };
+
+        piece_type
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub struct Piece {
+    color: Color,
+    piece_type: PieceType,
+}
+
+/// Represents the contents of a single square: either empty or occupied by a Piece.
+#[derive(Copy, Clone)]
+enum Square {
+    Empty,
+    Piece(Piece),
+}
+
 pub struct Board {
     pub bitboards: [u64; 12],
     /*
@@ -21,167 +68,155 @@ pub struct Board {
     pub fullmove_number: u32,
 }
 
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum PieceType {
-    Pawn = 0,
-    Knight = 1,
-    Bishop = 2,
-    Rook = 3,
-    Queen = 4,
-    King = 5,
-}
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum Color {
-    White = 0,
-    Black = 1,
-}
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub struct Piece {
-    color: Color,
-    piece_type: PieceType,
-}
-
-impl PieceType {
-    /// Creates a new `PieceType`
-    pub fn from(piece_type_str: String) -> Self {
-        let piece_type_str = piece_type_str.chars().next().unwrap();
-        let piece_type = match piece_type_str {
-            'p' => PieceType::Pawn,
-            'n' => PieceType::Knight,
-            'b' => PieceType::Bishop,
-            'r' => PieceType::Rook,
-            'q' => PieceType::Queen,
-            'k' => PieceType::King,
-            _ => panic!("Invalid piece type: {}", piece_type_str),
-        };
-
-        piece_type
-    }
-}
-
-#[derive(Copy, Clone)]
-enum Square {
-    Empty,
-    Piece(Piece),
-}
 impl Board {
-    fn fen_to_positions(fen: &str) -> [Square; 64] {
+    /// Parse the piece-placement field of a FEN (the first space-delimited part)
+    /// into an array of 64 squares, where:
+    ///
+    /// - `squares[0]` is a1 (bottom-left),
+    /// - `squares[7]` is h1,
+    /// - `squares[8]` is a2, ...,
+    /// - `squares[63]` is h8.
+    ///
+    /// The FEN ranks are given top-to-bottom: rank 8 first, then rank 7, etc.
+    fn fen_to_positions(fen_board: &str) -> [Square; 64] {
         let mut squares = [Square::Empty; 64];
-        let mut i = 0;
 
-        for c in fen.chars() {
-            match c {
-                'p' => {
-                    squares[i] = Square::Piece(Piece {
-                        color: Color::Black,
-                        piece_type: PieceType::Pawn,
-                    });
-                    i += 1;
+        let ranks: Vec<&str> = fen_board.split('/').collect();
+        assert_eq!(
+            ranks.len(),
+            8,
+            "FEN board must have 8 ranks separated by '/'"
+        );
+
+        // FEN rank 0 = top row (8th rank), rank 7 = bottom row (1st rank).
+        // But in our squares array, rank 0 corresponds to squares[0..8] (bottom).
+        // So we do: board_rank = 7 - fen_rank_index to invert top-to-bottom.
+        for (fen_rank_index, rank_str) in ranks.iter().enumerate() {
+            let board_rank = 7 - fen_rank_index;
+            let mut file = 0;
+
+            for ch in rank_str.chars() {
+                match ch {
+                    '1'..='8' => {
+                        // A digit means N consecutive empty squares
+                        let empty_count = ch.to_digit(10).unwrap() as usize;
+                        file += empty_count;
+                    }
+                    'p' => {
+                        squares[board_rank * 8 + file] = Square::Piece(Piece {
+                            color: Color::Black,
+                            piece_type: PieceType::Pawn,
+                        });
+                        file += 1;
+                    }
+                    'n' => {
+                        squares[board_rank * 8 + file] = Square::Piece(Piece {
+                            color: Color::Black,
+                            piece_type: PieceType::Knight,
+                        });
+                        file += 1;
+                    }
+                    'b' => {
+                        squares[board_rank * 8 + file] = Square::Piece(Piece {
+                            color: Color::Black,
+                            piece_type: PieceType::Bishop,
+                        });
+                        file += 1;
+                    }
+                    'r' => {
+                        squares[board_rank * 8 + file] = Square::Piece(Piece {
+                            color: Color::Black,
+                            piece_type: PieceType::Rook,
+                        });
+                        file += 1;
+                    }
+                    'q' => {
+                        squares[board_rank * 8 + file] = Square::Piece(Piece {
+                            color: Color::Black,
+                            piece_type: PieceType::Queen,
+                        });
+                        file += 1;
+                    }
+                    'k' => {
+                        squares[board_rank * 8 + file] = Square::Piece(Piece {
+                            color: Color::Black,
+                            piece_type: PieceType::King,
+                        });
+                        file += 1;
+                    }
+                    'P' => {
+                        squares[board_rank * 8 + file] = Square::Piece(Piece {
+                            color: Color::White,
+                            piece_type: PieceType::Pawn,
+                        });
+                        file += 1;
+                    }
+                    'N' => {
+                        squares[board_rank * 8 + file] = Square::Piece(Piece {
+                            color: Color::White,
+                            piece_type: PieceType::Knight,
+                        });
+                        file += 1;
+                    }
+                    'B' => {
+                        squares[board_rank * 8 + file] = Square::Piece(Piece {
+                            color: Color::White,
+                            piece_type: PieceType::Bishop,
+                        });
+                        file += 1;
+                    }
+                    'R' => {
+                        squares[board_rank * 8 + file] = Square::Piece(Piece {
+                            color: Color::White,
+                            piece_type: PieceType::Rook,
+                        });
+                        file += 1;
+                    }
+                    'Q' => {
+                        squares[board_rank * 8 + file] = Square::Piece(Piece {
+                            color: Color::White,
+                            piece_type: PieceType::Queen,
+                        });
+                        file += 1;
+                    }
+                    'K' => {
+                        squares[board_rank * 8 + file] = Square::Piece(Piece {
+                            color: Color::White,
+                            piece_type: PieceType::King,
+                        });
+                        file += 1;
+                    }
+                    // Ignore the slash itself — it’s part of the FEN rank separators
+                    _ => panic!("Invalid FEN character: {}", ch),
                 }
-                'n' => {
-                    squares[i] = Square::Piece(Piece {
-                        color: Color::Black,
-                        piece_type: PieceType::Knight,
-                    });
-                    i += 1;
-                }
-                'b' => {
-                    squares[i] = Square::Piece(Piece {
-                        color: Color::Black,
-                        piece_type: PieceType::Bishop,
-                    });
-                    i += 1;
-                }
-                'r' => {
-                    squares[i] = Square::Piece(Piece {
-                        color: Color::Black,
-                        piece_type: PieceType::Rook,
-                    });
-                    i += 1;
-                }
-                'q' => {
-                    squares[i] = Square::Piece(Piece {
-                        color: Color::Black,
-                        piece_type: PieceType::Queen,
-                    });
-                    i += 1;
-                }
-                'k' => {
-                    squares[i] = Square::Piece(Piece {
-                        color: Color::Black,
-                        piece_type: PieceType::King,
-                    });
-                    i += 1;
-                }
-                'P' => {
-                    squares[i] = Square::Piece(Piece {
-                        color: Color::White,
-                        piece_type: PieceType::Pawn,
-                    });
-                    i += 1;
-                }
-                'N' => {
-                    squares[i] = Square::Piece(Piece {
-                        color: Color::White,
-                        piece_type: PieceType::Knight,
-                    });
-                    i += 1;
-                }
-                'B' => {
-                    squares[i] = Square::Piece(Piece {
-                        color: Color::White,
-                        piece_type: PieceType::Bishop,
-                    });
-                    i += 1;
-                }
-                'R' => {
-                    squares[i] = Square::Piece(Piece {
-                        color: Color::White,
-                        piece_type: PieceType::Rook,
-                    });
-                    i += 1;
-                }
-                'Q' => {
-                    squares[i] = Square::Piece(Piece {
-                        color: Color::White,
-                        piece_type: PieceType::Queen,
-                    });
-                    i += 1;
-                }
-                'K' => {
-                    squares[i] = Square::Piece(Piece {
-                        color: Color::White,
-                        piece_type: PieceType::King,
-                    });
-                    i += 1;
-                }
-                '/' => (), // Skip row separator
-                '1'..='8' => {
-                    let n = c.to_digit(10).unwrap() as usize;
-                    i += n; // Advance the index by the number of empty squares
-                }
-                _ => panic!("Invalid FEN character: {}", c),
             }
+            assert!(
+                file <= 8,
+                "FEN rank '{}' has too many squares (exceeds 8)",
+                rank_str
+            );
         }
 
         squares
     }
 
+    /// Parse an entire FEN string into a `Board`.
+    /// Expected format: "<piece-placements> <active_color> <castling> <en_passant> <halfmove> <fullmove>"
     pub fn fen_to_board(fen: &str) -> Board {
         let parts: Vec<&str> = fen.split_whitespace().collect();
         assert_eq!(parts.len(), 6, "Invalid FEN string");
 
+        // 1) Piece placement
         let squares = Board::fen_to_positions(parts[0]);
 
-        // Parse active color
+        // 2) Active color
         let active_color = match parts[1] {
             "w" => Color::White,
             "b" => Color::Black,
             _ => panic!("Invalid active color: {}", parts[1]),
         };
 
-        // Parse castling rights
+        // 3) Castling rights
         let mut castling_rights = 0;
         if parts[2].contains('K') {
             castling_rights |= 1; // White kingside
@@ -196,7 +231,7 @@ impl Board {
             castling_rights |= 1 << 3; // Black queenside
         }
 
-        // Parse en passant square
+        // 4) En passant
         let en_passant = if parts[3] != "-" {
             let file = parts[3].chars().nth(0).unwrap() as usize - 'a' as usize;
             let rank = parts[3].chars().nth(1).unwrap() as usize - '1' as usize;
@@ -205,23 +240,19 @@ impl Board {
             None
         };
 
-        // Parse halfmove clock
+        // 5) Halfmove clock
         let halfmove_clock = parts[4].parse::<u32>().unwrap();
 
-        // Parse fullmove number
+        // 6) Fullmove number
         let fullmove_number = parts[5].parse::<u32>().unwrap();
 
-        // Build bitboards
-        let mut bitboards = [0; 12];
-        // reverse the squares to get the correct order
-        for (i, square) in squares.iter().rev().enumerate() {
-            match square {
-                Square::Piece(piece) => {
-                    let piece_type = piece.piece_type as usize;
-                    let color = piece.color as usize;
-                    bitboards[(color * 6) + piece_type] |= 1 << i;
-                }
-                Square::Empty => (),
+        // Build bitboards based on squares
+        let mut bitboards = [0u64; 12];
+        for (sq_index, square) in squares.iter().enumerate() {
+            if let Square::Piece(piece) = square {
+                let piece_type_index = piece.piece_type as usize;
+                let color_offset = piece.color as usize * 6;
+                bitboards[color_offset + piece_type_index] |= 1 << sq_index;
             }
         }
 
@@ -234,22 +265,27 @@ impl Board {
             fullmove_number,
         }
     }
+
+    /// Print a textual representation of the board to stdout.
     pub fn display(&self) {
-        let mut board = [['*'; 8]; 8]; // Initialize the board with '*' for empty spots
+        // Use these symbols to show the board (white first, then black)
         let piece_chars = [
-            '♙', '♘', '♗', '♖', '♕', '♔', // White pieces
-            '♟', '♞', '♝', '♜', '♛', '♚', // Black pieces
+            '♙', '♘', '♗', '♖', '♕', '♔', // White
+            '♟', '♞', '♝', '♜', '♛', '♚', // Black
         ];
-        for (i, bitboard) in self.bitboards.iter().enumerate() {
-            for j in 0..64 {
-                if bitboard & (1 << j) != 0 {
-                    board[j / 8][j % 8] = piece_chars[i];
+
+        // row 7 is top (rank 8) in typical text display, row 0 is bottom (rank 1)
+        for rank in (0..8).rev() {
+            for file in 0..8 {
+                let sq_index = rank * 8 + file;
+                let mut ch = '*';
+                for (i, bitboard) in self.bitboards.iter().enumerate() {
+                    if (bitboard & (1 << sq_index)) != 0 {
+                        ch = piece_chars[i];
+                        break;
+                    }
                 }
-            }
-        }
-        for i in 0..8 {
-            for j in 0..8 {
-                print!("{} ", board[i][j]);
+                print!("{} ", ch);
             }
             println!();
         }
@@ -290,39 +326,48 @@ impl Board {
         println!("Fullmove Number: {}", self.fullmove_number);
     }
 
+    /// Utility to print a 64-bit bitboard in an 8x8 grid to stdout.
     pub fn display_bitboard(bitboard: u64) {
         for i in (0..64).rev() {
-            if i % 8 == 0 {
+            if i % 8 == 7 {
                 println!();
             }
-            print!("{}", if bitboard & (1 << i) != 0 { "1" } else { "0" });
+            if (bitboard & (1 << i)) != 0 {
+                print!("1");
+            } else {
+                print!("0");
+            }
         }
         println!();
     }
 
+    /// Convert this Board back into a FEN string. If you store squares
+    /// from a1..h1 up to a8..h8, you have to be careful to output ranks
+    /// top-to-bottom.
     pub fn board_to_fen(&self) -> String {
         let mut fen = String::new();
 
-        // Convert bitboards to a FEN position string
-        for rank in 0..8 {
+        // For each rank from top (7) to bottom (0):
+        for rank in (0..8).rev() {
             let mut empty_count = 0;
 
             for file in 0..8 {
-                let square_index = rank * 8 + file;
+                let sq_index = rank * 8 + file;
 
-                // Check which piece occupies the square, if any
-                let piece = self
+                // Which (if any) piece index occupies this square?
+                let piece_index_opt = self
                     .bitboards
                     .iter()
-                    .position(|&bitboard| bitboard & (1 << square_index) != 0);
+                    .position(|&bb| (bb & (1 << sq_index)) != 0);
 
-                if let Some(piece) = piece {
+                if let Some(piece_index) = piece_index_opt {
+                    // If we had some empty squares prior, flush them into the FEN.
                     if empty_count > 0 {
                         fen.push_str(&empty_count.to_string());
                         empty_count = 0;
                     }
 
-                    let piece_char = match piece {
+                    let piece_char = match piece_index {
                         0 => 'P',  // White Pawn
                         1 => 'N',  // White Knight
                         2 => 'B',  // White Bishop
@@ -335,19 +380,20 @@ impl Board {
                         9 => 'r',  // Black Rook
                         10 => 'q', // Black Queen
                         11 => 'k', // Black King
-                        _ => panic!("Invalid piece index"),
+                        _ => panic!("Invalid piece index: {piece_index}"),
                     };
-
                     fen.push(piece_char);
                 } else {
                     empty_count += 1;
                 }
             }
 
+            // If there are empty squares at the end of the rank, add them
             if empty_count > 0 {
                 fen.push_str(&empty_count.to_string());
             }
 
+            // Separate ranks with '/'
             if rank > 0 {
                 fen.push('/');
             }
@@ -379,7 +425,7 @@ impl Board {
             }
         }
 
-        // En passant target square
+        // En passant
         fen.push(' ');
         if let Some(square) = self.en_passant {
             let file = (square % 8) as u8 + b'a';
@@ -402,24 +448,42 @@ impl Board {
     }
 }
 
+// -------------------------------
+// Tests
+// -------------------------------
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
     fn test_fen_to_positions_for_one_pawn() {
+        // White pawn on e2
         let fen = "8/8/8/8/8/8/4P3/8 w - - 0 1";
-        let squares = Board::fen_to_board(fen);
-
-        assert_eq!(squares.bitboards[0], 1 << 12);
+        let board = Board::fen_to_board(fen);
+        // e2 => rank=1, file=4 => index = 1*8 + 4 = 12
+        assert_eq!(board.bitboards[0], 1 << 12); // White Pawns are bitboards[0]
     }
 
     #[test]
     fn test_fen_to_position_for_two_pawns() {
+        // White pawns on d2, e2 => (rank=1, file=3) and (rank=1, file=4)
         let fen = "8/8/8/8/8/8/3PP3/8 w - - 0 1";
-        let squares = Board::fen_to_board(fen);
+        let board = Board::fen_to_board(fen);
 
-        let test_bitboard: u64 = 1 << 12 | 1 << 11;
-        assert_eq!(squares.bitboards[0], test_bitboard);
+        let expected_bitboard: u64 = (1 << 11) | (1 << 12);
+        assert_eq!(board.bitboards[0], expected_bitboard);
+    }
+
+    #[test]
+    fn test_fen_to_position_for_many_random_pawns() {
+        let fen = "P6P/8/3pp3/8/8/8/3PP3/P6P w - - 0 1";
+        let board = Board::fen_to_board(fen);
+
+        let expected_white_bitboard: u64 =
+            (1 << 11) | (1 << 12) | 1 << 0 | 1 << 7 | 1 << 56 | 1 << 63;
+        let expected_black_bitboard: u64 =
+            (1 << 44) | (1 << 43);
+        assert_eq!(board.bitboards[0], expected_white_bitboard);
+        assert_eq!(board.bitboards[6], expected_black_bitboard);
     }
 }
