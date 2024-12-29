@@ -1,3 +1,5 @@
+use crate::chess_move::{find_peice_at_from_location, validate_move, Move};
+
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Color {
     White = 0,
@@ -446,6 +448,125 @@ impl Board {
 
         fen
     }
+
+    pub fn move_peice(&mut self, m: Move) -> bool {
+        let valid = validate_move(self, &m);
+
+        if valid {
+            // Update the board state
+            // 1. Move the piece
+
+            // update the bitboards
+
+            let friendly_bitboards = match self.active_color {
+                Color::White => &self.bitboards[0..6],
+                Color::Black => &self.bitboards[6..12],
+            };
+
+            let enemy_bitboards = match self.active_color {
+                Color::White => &self.bitboards[6..12],
+                Color::Black => &self.bitboards[0..6],
+            };
+
+            // figure out what peice were moving
+            let peice_type = find_peice_at_from_location(self, &m);
+
+            let peice_type = match peice_type {
+                Some(peice_type) => peice_type,
+                None => return false,
+            };
+
+            // figure out if the piece is taking another piece
+            let capture = match enemy_bitboards[peice_type as usize] & (1 << m.to) {
+                0 => false,
+                _ => true,
+            };
+
+            if capture {
+                // find what kind of peice we are taking
+                let to_bit = 1 << m.to;
+                let taken_peice_type = enemy_bitboards.iter().position(|&bb| bb & to_bit != 0);
+
+                // Once we find the type of peice we are taking, remove it from the enemy bitboard
+                match taken_peice_type {
+                    Some(taken_peice_type) => {
+                        self.bitboards[taken_peice_type
+                            + match self.active_color {
+                                Color::White => 6,
+                                Color::Black => 0,
+                            }] &= !to_bit;
+                    }
+                    None => return false,
+                }
+            }
+
+            // Remove the peice being moved from the 'from' location for its given bitboard
+            self.bitboards[peice_type as usize
+                + match self.active_color {
+                    Color::White => 0,
+                    Color::Black => 6,
+                }] &= !(1 << m.from);
+
+            // Add the peice being moved to the 'to' location for its given bitboard
+            self.bitboards[peice_type as usize
+                + match self.active_color {
+                    Color::White => 0,
+                    Color::Black => 6,
+                }] |= 1 << m.to;
+            // 2. Update castling rights
+            if peice_type == PieceType::King {
+                match m.from {
+                    4 => {
+                        // White King
+                        self.castling_rights &= !(1 | 2);
+                    }
+                    60 => {
+                        // Black King
+                        self.castling_rights &= !(4 | 8);
+                    }
+                    _ => {}
+                }
+            } else if peice_type == PieceType::Rook {
+                match m.from {
+                    0 => {
+                        // White Queenside Rook
+                        self.castling_rights &= !1;
+                    }
+                    7 => {
+                        // White Kingside Rook
+                        self.castling_rights &= !2;
+                    }
+                    56 => {
+                        // Black Queenside Rook
+                        self.castling_rights &= !4;
+                    }
+                    63 => {
+                        // Black Kingside Rook
+                        self.castling_rights &= !8;
+                    }
+                    _ => {}
+                }
+            }
+            // 3. Update en passant
+            // 4. Update halfmove clock
+            if peice_type == PieceType::Pawn || capture {
+                self.halfmove_clock = 0;
+            } else {
+                self.halfmove_clock += 1;
+            }
+            // 5. Update fullmove number
+            if self.active_color == Color::Black {
+                self.fullmove_number += 1;
+            }
+            // 6. Switch active color
+            self.active_color = match self.active_color {
+                Color::White => Color::Black,
+                Color::Black => Color::White,
+            };
+        }
+
+        valid
+    }
 }
 
 // -------------------------------
@@ -481,8 +602,7 @@ mod tests {
 
         let expected_white_bitboard: u64 =
             (1 << 11) | (1 << 12) | 1 << 0 | 1 << 7 | 1 << 56 | 1 << 63;
-        let expected_black_bitboard: u64 =
-            (1 << 44) | (1 << 43);
+        let expected_black_bitboard: u64 = (1 << 44) | (1 << 43);
         assert_eq!(board.bitboards[0], expected_white_bitboard);
         assert_eq!(board.bitboards[6], expected_black_bitboard);
     }

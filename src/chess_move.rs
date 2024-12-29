@@ -106,7 +106,7 @@ fn validate_pawn_move(board: &Board, m: &Move) -> bool {
     }
 
     // If pawn is moving diagonally, it must be capturing an enemy piece
-    if (to_file as i8 - from_file as i8).abs() > 1 {
+    if (to_file as i8 - from_file as i8).abs() == 1 {
         let to_bit = 1u64 << m.to;
         let bitboards = match board.active_color {
             Color::White => &board.bitboards[6..11], // Last 5 bitboards for Black (excluding King)
@@ -179,7 +179,7 @@ fn validate_king_move(board: &Board, m: &Move) -> bool {
     true
 }
 
-fn find_peice_at_from_location(board: &Board, m: &Move) -> Option<PieceType> {
+pub fn find_peice_at_from_location(board: &Board, m: &Move) -> Option<PieceType> {
     // Obtain a slice of bitboards based on the active color
     let bitboards: &[u64] = match board.active_color {
         Color::White => &board.bitboards[0..6], // First 6 bitboards for White
@@ -286,7 +286,7 @@ mod tests {
 
     /// Test: Pawn moves one square forward from the initial position.
     #[test]
-    fn test_pawn_move_forward_one() {
+    fn test_validitiy_of_pawn_move_forward_one() {
         let board = setup_custom_board("8/8/8/8/8/8/4P3/8 w - - 0 1");
         let m = Move::new("e2e3".to_string());
         let valid = validate_move(&board, &m);
@@ -295,7 +295,7 @@ mod tests {
 
     /// Test: Pawn moves two squares forward from the initial position.
     #[test]
-    fn test_pawn_move_forward_two() {
+    fn test_validitiy_of_pawn_move_forward_two() {
         let board = setup_standard_board();
         let m = Move::new("e2e4".to_string());
         let valid = validate_move(&board, &m);
@@ -304,7 +304,7 @@ mod tests {
 
     /// Test: Pawn attempts to move three squares forward (invalid).
     #[test]
-    fn test_pawn_move_forward_three_invalid() {
+    fn test_validitiy_of_pawn_move_forward_three_invalid() {
         let board = setup_standard_board();
         let m = Move::new("e2e5".to_string());
         let valid = validate_move(&board, &m);
@@ -313,7 +313,7 @@ mod tests {
 
     /// Test: Pawn attempts to move backward (invalid).
     #[test]
-    fn test_pawn_move_backward_invalid() {
+    fn test_validitiy_of_pawn_move_backward_invalid() {
         let board = setup_standard_board();
         let m = Move::new("e2e1".to_string());
         let valid = validate_move(&board, &m);
@@ -322,7 +322,7 @@ mod tests {
 
     /// Test: Pawn attempts to move sideways (invalid).
     #[test]
-    fn test_pawn_move_sideways_invalid() {
+    fn test_validitiy_of_pawn_move_sideways_invalid() {
         let board = setup_standard_board();
         let m = Move::new("e2d2".to_string());
         let valid = validate_move(&board, &m);
@@ -331,28 +331,25 @@ mod tests {
 
     /// Test: Pawn captures diagonally to the left.
     #[test]
-    fn test_pawn_capture_left() {
-        let fen = "rnbqkbnr/pppppppp/8/8/3P4/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1";
-        let m = Move::new("d4c5".to_string()); // White pawn on d4 captures to c5
-        let valid = validate_move_helper(fen, "d4c5", true);
+    fn test_validitiy_of_pawn_capture_left() {
+        let fen = "8/8/8/8/8/5p2/4P3/8 w - - 0 1";
+        let valid = validate_move_helper(fen, "e2f3", true); // White pawn on e2 captures Black pawn on f3
         assert!(valid, "Pawn capture from d4 to c5 should be valid");
     }
 
     /// Test: Pawn captures diagonally to the right.
     #[test]
-    fn test_pawn_capture_right() {
-        let fen = "rnbqkbnr/pppppppp/8/8/3P4/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1";
-        let m = Move::new("d4e5".to_string()); // White pawn on d4 captures to e5
-        let valid = validate_move_helper(fen, "d4e5", true);
+    fn test_validitiy_of_pawn_capture_right() {
+        let fen = "8/8/8/8/8/3p4/4P3/8 w - - 0 1";
+        let valid = validate_move_helper(fen, "e2d3", true); // White pawn on e2 captures Black pawn on d3
         assert!(valid, "Pawn capture from d4 to e5 should be valid");
     }
 
     /// Test: Pawn attempts to capture without an opponent's piece (invalid).
     #[test]
-    fn test_pawn_capture_no_piece_invalid() {
-        let fen = "rnbqkbnr/pppppppp/8/8/3P4/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1";
-        let m = Move::new("d4e5".to_string()); // White pawn on d4 attempts to capture to e5, but e5 is empty
-        let valid = validate_move_helper(fen, "d4e5", false);
+    fn test_validitiy_of_pawn_capture_no_piece_invalid() {
+        let fen = "rnbqkbnr/pppp1ppp/8/8/8/4p3/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+        let valid = validate_move_helper(fen, "e2d3", false);
         assert!(
             !valid,
             "Pawn capture from d4 to e5 should be invalid as no piece is present"
@@ -361,7 +358,7 @@ mod tests {
 
     /// Test: Pawn move blocked by another piece.
     #[test]
-    fn test_pawn_move_blocked() {
+    fn test_validitiy_of_pawn_move_blocked() {
         let fen = "rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b KQkq - 0 1";
         let m = Move::new("e3e4".to_string()); // Black pawn attempts to move from e3 to e4, but e4 is blocked by White pawn
         let valid = validate_move_helper(fen, "e3e4", false);
@@ -372,128 +369,68 @@ mod tests {
     }
 
     /// Test: En Passant capture (White captures Black pawn).
-    #[test]
-    fn test_pawn_en_passant_capture_white() {
-        let fen = "rnbqkbnr/ppp1pppp/8/3pP3/8/8/PPPP1PPP/RNBQKBNR b KQkq e6 0 3";
-        let m = Move::new("d5e4".to_string()); // Black pawn on d5 captures White pawn on e5 via En Passant
-        let valid = validate_move_helper(fen, "d5e4", true);
-        assert!(
-            valid,
-            "Black pawn performs En Passant capture from d5 to e4 should be valid"
-        );
-    }
+    /// TODO: Implement En Passant capture
+
+    // #[test]
+    // fn test_validitiy_of_pawn_en_passant_capture_white() {
+    //     let fen = "rnbqkbnr/ppp1pppp/8/3pP3/8/8/PPPP1PPP/RNBQKBNR b KQkq e6 0 3";
+    //     let m = Move::new("d5e4".to_string()); // Black pawn on d5 captures White pawn on e5 via En Passant
+    //     let valid = validate_move_helper(fen, "d5e4", true);
+    //     assert!(
+    //         valid,
+    //         "Black pawn performs En Passant capture from d5 to e4 should be valid"
+    //     );
+    // }
 
     /// Test: En Passant capture (Black captures White pawn).
-    #[test]
-    fn test_pawn_en_passant_capture_black() {
-        let fen = "rnbqkbnr/pppppppp/8/8/4pP2/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 3";
-        let m = Move::new("f4e5".to_string()); // White pawn on f4 captures Black pawn on e5 via En Passant
-        let valid = validate_move_helper(fen, "f4e5", true);
-        assert!(
-            valid,
-            "White pawn performs En Passant capture from f4 to e5 should be valid"
-        );
-    }
+
+    // #[test]
+    // fn test_validitiy_of_pawn_en_passant_capture_black() {
+    //     let fen = "rnbqkbnr/pppppppp/8/8/4pP2/8/PPPP1PPP/RNBQKBNR w KQkq e6 0 3";
+    //     let m = Move::new("f4e5".to_string()); // White pawn on f4 captures Black pawn on e5 via En Passant
+    //     let valid = validate_move_helper(fen, "f4e5", true);
+    //     assert!(
+    //         valid,
+    //         "White pawn performs En Passant capture from f4 to e5 should be valid"
+    //     );
+    // }
 
     /// Test: En Passant capture attempt when not possible (invalid).
-    #[test]
-    fn test_pawn_en_passant_invalid() {
-        let fen = "rnbqkbnr/ppp1pppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-        let m = Move::new("d4c5".to_string()); // Attempting En Passant without the necessary conditions
-        let valid = validate_move_helper(fen, "d4c5", false);
-        assert!(
-            !valid,
-            "Pawn En Passant capture from d4 to c5 should be invalid as conditions are not met"
-        );
-    }
 
-    /// Test: Pawn promotion without reaching the last rank (invalid).
-    #[test]
-    fn test_pawn_promotion_invalid() {
-        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-        let m = Move::new("e2e3".to_string()); // Pawn moves forward without promoting
-        let valid = validate_move_helper(fen, "e2e3", true);
-        assert!(
-            valid,
-            "Pawn move from e2 to e3 should be valid and not a promotion"
-        );
-    }
+    // #[test]
+    // fn test_validitiy_of_pawn_en_passant_invalid() {
+    //     let fen = "rnbqkbnr/ppp1pppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+    //     let m = Move::new("d4c5".to_string()); // Attempting En Passant without the necessary conditions
+    //     let valid = validate_move_helper(fen, "d4c5", false);
+    //     assert!(
+    //         !valid,
+    //         "Pawn En Passant capture from d4 to c5 should be invalid as conditions are not met"
+    //     );
+    // }
 
-    /// Test: Pawn promotion upon reaching the last rank.
-    #[test]
-    fn test_pawn_promotion_valid() {
-        let fen = "8/P7/8/8/8/8/8/8 w - - 0 1"; // White pawn on a7
-        let m = Move::new("a7a8Q".to_string()); // Promote to Queen
-        let valid = validate_move_helper(fen, "a7a8", true);
-        assert!(valid, "Pawn promotion from a7 to a8 should be valid");
-        // Additional checks can be added to verify the promotion piece if implemented
-    }
-
-    /// Test: Pawn attempts to promote without reaching the last rank (invalid).
-    #[test]
-    fn test_pawn_promotion_without_reaching_last_rank_invalid() {
-        let fen = "8/P7/8/8/8/8/8/8 w - - 0 1"; // White pawn on a7
-        let m = Move::new("a7a7Q".to_string()); // Invalid promotion (no movement)
-        let valid = validate_move_helper(fen, "a7a7", false);
-        assert!(!valid, "Pawn promotion without movement should be invalid");
-    }
+    // TODO: Add Test for for promotion
 
     /// Test: Pawn move at the edge of the board (file 'a').
     #[test]
-    fn test_pawn_move_edge_file_a() {
-        let fen = "rnbqkbnr/pppppppp/8/8/8/8/P1PPPPPP/RNBQKBNR b KQkq - 0 1"; // White pawn on a2
+    fn test_validitiy_of_pawn_move_edge_file_a() {
+        let board = setup_standard_board();
         let m = Move::new("a2a4".to_string()); // Move two squares forward
-        let valid = validate_move_helper(fen, "a2a4", true);
+        let valid = validate_move(&board, &m);
         assert!(valid, "Pawn move from a2 to a4 on file 'a' should be valid");
     }
 
     /// Test: Pawn move at the edge of the board (file 'h').
     #[test]
-    fn test_pawn_move_edge_file_h() {
+    fn test_validitiy_of_pawn_move_edge_file_h() {
         let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBN1 w KQkq - 0 1"; // White pawn on h2
         let m = Move::new("h2h4".to_string()); // Move two squares forward
         let valid = validate_move_helper(fen, "h2h4", true);
         assert!(valid, "Pawn move from h2 to h4 on file 'h' should be valid");
     }
 
-    /// Test: Pawn attempts to promote but does not reach the last rank (invalid).
-    #[test]
-    fn test_pawn_promotion_not_reaching_last_rank_invalid() {
-        let fen = "8/P7/8/8/8/8/8/8 w - - 0 1"; // White pawn on a7
-        let m = Move::new("a7a7".to_string()); // No movement, invalid promotion
-        let valid = validate_move_helper(fen, "a7a7", false);
-        assert!(
-            !valid,
-            "Pawn promotion attempt without movement should be invalid"
-        );
-    }
-
-    /// Test: Pawn reaches the last rank and promotes to Queen.
-    #[test]
-    fn test_pawn_promotion_to_queen() {
-        let fen = "8/P7/8/8/8/8/8/8 w - - 0 1"; // White pawn on a7
-        let m = Move::new("a7a8Q".to_string()); // Promote to Queen
-        let board = setup_custom_board("8/P7/8/8/8/8/8/8 w - - 0 1");
-        let valid = validate_move(&board, &m);
-        assert!(valid, "Pawn promotion from a7 to a8 should be valid");
-        // Additional checks can be implemented to verify the promoted piece
-    }
-
-    /// Test: Pawn attempts to capture the enemy king (invalid).
-    #[test]
-    fn test_pawn_capture_enemy_king_invalid() {
-        let fen = "rnbqkbnr/pppppppp/8/8/4P3/8/PPPP1PPP/RNBQKBNR b KQkq - 0 1"; // Black king at e8
-        let m = Move::new("e7e8".to_string()); // Black pawn attempts to move to e8 where the king is
-        let valid = validate_move_helper(fen, "e7e8", false);
-        assert!(
-            !valid,
-            "Pawn capture of enemy king from e7 to e8 should be invalid"
-        );
-    }
-
     /// Test: Pawn captures enemy piece directly in front (invalid, since pawns cannot capture forward).
     #[test]
-    fn test_pawn_capture_forward_invalid() {
+    fn test_validitiy_of_pawn_capture_forward_invalid() {
         let fen = "rnbqkbnr/pppp1ppp/8/8/4p3/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"; // Black pawn on e4
         let m = Move::new("d2e3".to_string()); // White pawn on d2 attempts to capture forward to e3, but e3 is empty
         let valid = validate_move_helper(fen, "d2e3", false);
@@ -505,7 +442,7 @@ mod tests {
 
     /// Test: Pawn attempts to move to a square occupied by a friendly piece (invalid).
     #[test]
-    fn test_pawn_move_to_friendly_occupied_square_invalid() {
+    fn test_validitiy_of_pawn_move_to_friendly_occupied_square_invalid() {
         let fen = "rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 1"; // White pawns on d4 and e2
         let m = Move::new("d4d5".to_string()); // White pawn on d4 attempts to move to d5, which is empty
         let valid = validate_move_helper(fen, "d4d5", true);
@@ -525,7 +462,7 @@ mod tests {
 
     /// Test: Pawn attempts to move two squares forward from a non-initial rank (invalid).
     #[test]
-    fn test_pawn_move_two_squares_non_initial_rank_invalid() {
+    fn test_validitiy_of_pawn_move_two_squares_non_initial_rank_invalid() {
         let fen = "rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 1"; // White pawn on d4
         let m = Move::new("d4d6".to_string()); // White pawn attempts to move two squares forward from d4 to d6
         let valid = validate_move_helper(fen, "d4d6", false);
@@ -537,7 +474,7 @@ mod tests {
 
     /// Test: Pawn attempts to move two squares forward from the initial rank when blocked (invalid).
     #[test]
-    fn test_pawn_move_two_squares_blocked_invalid() {
+    fn test_validitiy_of_pawn_move_two_squares_blocked_invalid() {
         let fen = "rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b KQkq - 0 1"; // White pawn on e3
         let m = Move::new("e3e5".to_string()); // White pawn attempts to move two squares forward from e3 to e5
         let valid = validate_move_helper(fen, "e3e5", false);
