@@ -2,6 +2,9 @@ use crate::board::Board;
 use crate::board::Color;
 use crate::board::PieceType;
 use crate::utils::convert_board_coordinate_to_idx;
+use crate::utils::EDGE_DISTANCES;
+use std::collections::HashSet;
+use std::hash::Hash;
 
 // Uses UCI Notation
 #[derive(Debug, Clone)]
@@ -191,18 +194,184 @@ fn validate_knight_move(board: &Board, m: &Move) -> bool {
     true
 }
 fn validate_bishop_move(board: &Board, m: &Move) -> bool {
+    // Ensures we are not capturing a friendly piece or the enemy king
+    let valid_to_location = validate_to_location(board, m);
+
+    if !valid_to_location {
+        println!(
+            "Invalid move: Bishop moving to an invalid location {}",
+            m.to
+        );
+        return false;
+    }
+
+    let moves = generate_sliding_moves(board, PieceType::Bishop, m);
+
+    if !moves.contains(&m.to) {
+        println!(
+            "Invalid move: Bishop moving to an invalid location {}",
+            m.to
+        );
+        return false;
+    }
+
     true
 }
 fn validate_rook_move(board: &Board, m: &Move) -> bool {
+    // Ensures we are not capturing a friendly piece or the enemy king
+    let valid_to_location = validate_to_location(board, m);
+
+    if !valid_to_location {
+        println!("Invalid move: Rook moving to an invalid location {}", m.to);
+        return false;
+    }
+
+    let moves = generate_sliding_moves(board, PieceType::Rook, m);
+
+    if !moves.contains(&m.to) {
+        println!(
+            "Invalid move: Bishop moving to an invalid location {}",
+            m.to
+        );
+        return false;
+    }
+
     true
 }
 fn validate_queen_move(board: &Board, m: &Move) -> bool {
+    // Ensures we are not capturing a friendly piece or the enemy king
+    let valid_to_location = validate_to_location(board, m);
+
+    if !valid_to_location {
+        println!("Invalid move: Queen moving to an invalid location {}", m.to);
+        return false;
+    }
+
+    let moves = generate_sliding_moves(board, PieceType::Queen, m);
+
+    if !moves.contains(&m.to) {
+        println!("Invalid move: Queen moving to an invalid location {}", m.to);
+        return false;
+    }
+
     true
 }
 fn validate_king_move(board: &Board, m: &Move) -> bool {
     true
 }
 
+pub fn generate_sliding_moves(board: &Board, piece_type: PieceType, m: &Move) -> HashSet<u8> {
+    let mut moves = HashSet::new();
+
+    let capturable_bitboards: &[u64] = match board.active_color {
+        Color::White => &board.bitboards[6..11], // Last 5 bitboards for Black (Excluding King)
+        Color::Black => &board.bitboards[0..5],  // First 5 bitboards for White (Excluding King)
+    };
+
+    let friendly_bitboards: &[u64] = match board.active_color {
+        Color::White => &board.bitboards[0..6], // First 6 bitboards for White
+        Color::Black => &board.bitboards[6..12], // Last 6 bitboards for Black
+    };
+
+    let enemy_king_bitboard = match board.active_color {
+        Color::White => board.bitboards[11], // Black king
+        Color::Black => board.bitboards[5],  // White king
+    };
+
+    match piece_type {
+        PieceType::Bishop => {
+            let distance_to_jump: [i8; 4] = [9, 7, -7, -9]; // [NE, NW, SE, SW]
+            let dir: [u8; 4] = [4, 5, 6, 7];
+
+            // for each direction [NE, NW, SE, SW]
+            for i in 0..4 {
+                // get the max distance to the edge of the board for that given direction
+                let max_distance = EDGE_DISTANCES[dir[i] as usize][m.from as usize];
+
+                // for each square in that direction jumping by the distance to the edge
+                for hop_distance_multiplier in 1..=max_distance {
+                    let hop_distance = distance_to_jump[i] * hop_distance_multiplier as i8;
+
+                    let to: u8 = ((m.from as i8) + hop_distance) as u8;
+
+                    // dbg!("{:?}", to);
+                    let to_bit: u64 = 1u64 << to;
+                    // if the square is occupied by a friendly piece or the enemy king, stop
+                    if friendly_bitboards.iter().any(|&bb| bb & to_bit != 0)
+                        || enemy_king_bitboard & to_bit != 0
+                    {
+                        break;
+                    }
+
+                    // if the square is occupied by an enemy piece, add it to the moves set and stop
+                    if capturable_bitboards.iter().any(|&bb| bb & to_bit != 0) {
+                        moves.insert(to);
+                        break;
+                    }
+
+                    // if the square is empty, add it to the moves set
+                    moves.insert(to);
+                }
+            }
+        }
+        PieceType::Rook => {
+            // Define the distance offsets for Rook movement:
+            // [North, South, East, West]
+            let distance_to_jump: [i8; 4] = [8, -8, 1, -1];
+
+            // Match these directions to EDGE_DISTANCES indices:
+            // 0 = North, 1 = South, 2 = East, 3 = West
+            let dir: [u8; 4] = [0, 1, 2, 3];
+
+            // For each direction, move along that line until blocked or edge is reached.
+            for i in 0..4 {
+                // Get max squares available in this direction from the current square
+                let max_distance = EDGE_DISTANCES[dir[i] as usize][m.from as usize];
+
+                // Move up to `max_distance` squares in this direction
+                for hop_distance_multiplier in 1..=max_distance {
+                    let hop_distance = distance_to_jump[i] * hop_distance_multiplier as i8;
+
+                    let to: i8 = m.from as i8 + hop_distance;
+                    // If we go out of the 0..63 range, stop
+                    if to < 0 || to >= 64 {
+                        break;
+                    }
+
+                    let to_u8: u8 = to as u8;
+                    let to_bit: u64 = 1u64 << to_u8;
+
+                    // If friendly piece or enemy king occupies this square, stop.
+                    if friendly_bitboards.iter().any(|&bb| bb & to_bit != 0)
+                        || enemy_king_bitboard & to_bit != 0
+                    {
+                        break;
+                    }
+
+                    // dbg!("{:?}", to_u8);
+
+                    // If an enemy piece occupies this square, add it as a capture and stop.
+                    if capturable_bitboards.iter().any(|&bb| bb & to_bit != 0) {
+                        moves.insert(to_u8);
+                        break;
+                    }
+
+                    // If it's empty, add this square as a valid move and continue.
+                    moves.insert(to_u8);
+                }
+            }
+        }
+        PieceType::Queen => {
+            // Combine Rook and Bishop moves for the Queen
+            moves.extend(generate_sliding_moves(board, PieceType::Rook, m));
+            moves.extend(generate_sliding_moves(board, PieceType::Bishop, m));
+        }
+        _ => {
+            println!("Invalid piece type for sliding move generation");
+        }
+    }
+    moves
+}
 pub fn find_peice_at_from_location(board: &Board, m: &Move) -> Option<PieceType> {
     // Obtain a slice of bitboards based on the active color
     let bitboards: &[u64] = match board.active_color {
@@ -597,6 +766,554 @@ mod tests {
         assert!(
             !valid,
             "Pawn move from e3 to e5 should be invalid as the path is blocked"
+        );
+    }
+
+    // Test: Attempt to move White Bishop one square diagonal (valid)
+    #[test]
+    fn test_validity_of_bishop_move_one_square_diagonal() {
+        let fen = "8/8/8/8/3B4/8/8/8 w - - 0 1"; // White bishop on d4
+        let valid = validate_move_helper(fen, "d4e5", true); // White bishop moves from d4 to e5
+        assert!(
+            valid,
+            "Bishop move from d4 to e5 should be valid as it's one square diagonal"
+        );
+    }
+
+    // Test: Attempt to move White Bishop to the corner diagonal (valid)
+    #[test]
+    fn test_validity_of_bishop_move_to_corner_diagonal() {
+        let fen = "8/8/8/8/3B4/8/8/8 w - - 0 1"; // White bishop on d4
+        let valid = validate_move_helper(fen, "d4h8", true); // White bishop moves from d4 to e5
+        assert!(
+            valid,
+            "Bishop move from d4 to h8 should be valid as it's 4 square diagonal"
+        );
+    }
+
+    // Test: Attempt to move White Bishop to the corner diagonal when there is a queen there (invalid)
+    #[test]
+    fn test_invalidity_of_bishop_move_to_corner_diagonal_when_queen_present() {
+        let fen = "7Q/8/8/8/3B4/8/8/8 w - - 0 1"; // White bishop on d4
+        let valid = validate_move_helper(fen, "d4h8", false); // White bishop moves from d4 to h8
+        assert!(
+            !valid,
+            "Bishop move from d4 to h8 should be invalid as there is a queen there"
+        );
+    }
+
+    // Test: Attempt to move White Bishop to the corner diagonal when there is a black queen there (valid)
+    #[test]
+    fn test_validity_of_bishop_move_to_corner_diagonal_when_enemy_queen_present() {
+        let fen = "7q/8/8/8/3B4/8/8/8 w - - 0 1"; // White bishop on d4 Black Queen on h8
+        let valid = validate_move_helper(fen, "d4h8", true); // White bishop moves from d4 to h8
+        assert!(
+            valid,
+            "Bishop move from d4 to h8 should be invalid as there is a queen there"
+        );
+    }
+
+    /// Test: Bishop is blocked by a friendly piece on e5, cannot move or capture beyond it.
+    #[test]
+    fn test_bishop_blocked_by_friendly_piece() {
+        // White bishop on d4, White rook on e5, Black rook on f6
+        // Board visualization:
+        // 8 | . . . . . . . .
+        // 7 | . . . . . . . .
+        // 6 | . . . . . . . .
+        // 5 | . . . . R . . .
+        // 4 | . . . B . . . .
+        // 3 | . . . . . . . .
+        // 2 | . . . . . . . .
+        // 1 | . . . . . . . .
+        //     a b c d e f g h
+        // FEN: 8/8/8/4R3/3B4/8/8/8 w - - 0 1
+
+        let fen = "8/8/8/4R3/3B4/8/8/8 w - - 0 1";
+
+        // Trying to move d4 -> f6 (jumping over e5) should be invalid
+        let valid = validate_move_helper(fen, "d4f6", false);
+        assert!(
+            !valid,
+            "Bishop should not be able to jump over a friendly rook on e5"
+        );
+    }
+
+    /// Test: Bishop is blocked by an enemy piece on e5, so it cannot capture anything beyond e5.
+    #[test]
+    fn test_bishop_blocked_by_enemy_piece() {
+        // White bishop on d4, Black rook on e5, Black rook on f6
+        // Board visualization:
+        // 8 | . . . . . . . .
+        // 7 | . . . . . . . .
+        // 6 | . . . . . . r .
+        // 5 | . . . . r . . .
+        // 4 | . . . B . . . .
+        // 3 | . . . . . . . .
+        // 2 | . . . . . . . .
+        // 1 | . . . . . . . .
+        //     a b c d e f g h
+        // FEN: 8/8/5r2/4r3/3B4/8/8/8 w - - 0 1
+
+        let fen = "8/8/5r2/4r3/3B4/8/8/8 w - - 0 1";
+
+        // Attempt to move d4 -> f6 is invalid because the bishop cannot jump over the rook on e5
+        let valid_blocked = validate_move_helper(fen, "d4f6", false);
+        assert!(
+            !valid_blocked,
+            "Bishop cannot jump over an enemy rook on e5 to reach f6"
+        );
+    }
+
+    /// Test: Bishop captures the enemy piece on e5, but cannot go further to f6 in one move.
+    #[test]
+    fn test_bishop_capture_enemy_piece_but_not_jump_further() {
+        // White bishop on d4, Black rook on e5, another Black rook on f6
+        // Board visualization:
+        // 8 | . . . . . . . .
+        // 7 | . . . . . . . .
+        // 6 | . . . . . . r .
+        // 5 | . . . . r . . .
+        // 4 | . . . B . . . .
+        // 3 | . . . . . . . .
+        // 2 | . . . . . . . .
+        // 1 | . . . . . . . .
+        //     a b c d e f g h
+        // FEN: 8/8/5r2/4r3/3B4/8/8/8 w - - 0 1
+
+        let fen = "8/8/5r2/4r3/3B4/8/8/8 w - - 0 1";
+
+        // d4 -> e5 is valid (capture the black rook at e5)
+        let valid_capture = validate_move_helper(fen, "d4e5", true);
+        assert!(
+            valid_capture,
+            "Bishop should be able to capture the enemy rook at e5"
+        );
+
+        // However, trying to move from d4 -> f6 in a single move is invalid, because e5 is blocked first
+        let invalid_jump = validate_move_helper(fen, "d4f6", false);
+        assert!(
+        !invalid_jump,
+        "Bishop cannot skip over the black rook at e5 to capture another piece on f6 in the same move"
+    );
+    }
+
+    /// Test: Bishop cannot capture the enemy piece on f6 because a friendly piece on e5 is blocking it.
+    #[test]
+    fn test_bishop_capture_blocked_by_friendly_piece() {
+        // White bishop on d4, White pawn on e5, Black rook on f6
+        // Board visualization:
+        // 8 | . . . . . . . .
+        // 7 | . . . . . . . .
+        // 6 | . . . . . . r .
+        // 5 | . . . . P . . .
+        // 4 | . . . B . . . .
+        // 3 | . . . . . . . .
+        // 2 | . . . . . . . .
+        // 1 | . . . . . . . .
+        //     a b c d e f g h
+        // FEN: 8/8/5r2/4P3/3B4/8/8/8 w - - 0 1
+
+        let fen = "8/8/5r2/4P3/3B4/8/8/8 w - - 0 1";
+
+        // Attempting to move the bishop from d4 -> f6 is invalid, because the friendly pawn on e5 blocks the diagonal
+        let valid = validate_move_helper(fen, "d4f6", false);
+        assert!(
+            !valid,
+            "Bishop cannot capture the rook on f6 because a friendly pawn on e5 blocks the path"
+        );
+    }
+
+    #[test]
+    fn test_validity_of_black_bishop_simple_diagonal_move() {
+        // Black bishop on e4 (index 28).
+        // FEN visualization:
+        // 8 | . . . . . . . .
+        // 7 | . . . . . . . .
+        // 6 | . . . . . . . .
+        // 5 | . . . . . . . .
+        // 4 | . . . . b . . .
+        // 3 | . . . . . . . .
+        // 2 | . . . . . . . .
+        // 1 | . . . . . . . .
+        //     a b c d e f g h
+        // FEN: 8/8/8/8/4b3/8/8/8 b - - 0 1
+        //
+        // Black bishop attempts to move e4 -> h7 (a diagonal move).
+        // This should be valid if the path is clear.
+
+        let fen = "8/8/8/8/4b3/8/8/8 b - - 0 1";
+        // Check that moving e4 -> h7 is valid for a Black bishop
+        let valid = validate_move_helper(fen, "e4h7", true);
+        assert!(
+            valid,
+            "Black bishop move from e4 to h7 should be valid along a clear diagonal."
+        );
+    }
+
+    #[test]
+    fn test_validity_of_black_bishop_capture_white_piece() {
+        // Black bishop on e4, White rook on h7.
+        // FEN visualization:
+        // 8 | . . . . . . . .
+        // 7 | . . . . . . . R
+        // 6 | . . . . . . . .
+        // 5 | . . . . . . . .
+        // 4 | . . . . b . . .
+        // 3 | . . . . . . . .
+        // 2 | . . . . . . . .
+        // 1 | . . . . . . . .
+        //     a b c d e f g h
+        // FEN: 8/7R/8/8/4b3/8/8/8 b - - 0 1
+        //
+        // Black bishop attempts to move e4 -> h7 to capture the White rook.
+
+        let fen = "8/7R/8/8/4b3/8/8/8 b - - 0 1";
+        // Attempt to move e4 -> h7 (capture)
+        let valid = validate_move_helper(fen, "e4h7", true);
+        assert!(
+            valid,
+            "Black bishop should be able to capture the White rook on h7."
+        );
+    }
+
+    #[test]
+    fn test_invalidity_of_black_bishop_blocked_by_friendly_piece() {
+        // Black bishop on e4, Black knight on f5, White rook on g6.
+        // The bishop should NOT be able to jump over its own knight to capture the rook.
+        //
+        // FEN visualization:
+        // 8 | . . . . . . . .
+        // 7 | . . . . . . . .
+        // 6 | . . . . . . . R
+        // 5 | . . . . . n . .
+        // 4 | . . . . b . . .
+        // 3 | . . . . . . . .
+        // 2 | . . . . . . . .
+        // 1 | . . . . . . . .
+        //     a b c d e f g h
+        // FEN: 8/8/7R/5n2/4b3/8/8/8 b - - 0 1
+        //
+        // Black bishop tries e4 -> g6, but is blocked by the Black knight on f5.
+
+        let fen = "8/8/7R/5n2/4b3/8/8/8 b - - 0 1";
+        let valid = validate_move_helper(fen, "e4g6", false);
+        assert!(
+            !valid,
+            "Black bishop should not jump over its own knight on f5 to capture the rook on g6."
+        );
+    }
+
+    #[test]
+    fn test_bishop_capture_enemy_piece_but_not_jump_further_black() {
+        // Black bishop on d4, White rook on e5, White rook on f6.
+        // The bishop can capture the rook at e5 but cannot continue to f6 in one move.
+        //
+        // Board visualization:
+        // 8 | . . . . . . . .
+        // 7 | . . . . . . . .
+        // 6 | . . . . . . . R
+        // 5 | . . . . R . . .
+        // 4 | . . . b . . . .
+        // 3 | . . . . . . . .
+        // 2 | . . . . . . . .
+        // 1 | . . . . . . . .
+        //     a b c d e f g h
+        // FEN: 8/8/7R/4R3/3b4/8/8/8 b - - 0 1
+
+        let fen = "8/8/7R/4R3/3b4/8/8/8 b - - 0 1";
+
+        // 1. d4 -> e5 is valid (capture the White rook at e5)
+        let capture_valid = validate_move_helper(fen, "d4e5", true);
+        assert!(
+            capture_valid,
+            "Black bishop should be able to capture the White rook on e5."
+        );
+
+        // 2. Trying d4 -> f6 in one move is invalid, since e5 is occupied by a White rook (blocking further movement).
+        let jump_invalid = validate_move_helper(fen, "d4f6", false);
+        assert!(
+        !jump_invalid,
+        "Black bishop cannot jump over the White rook on e5 to capture another piece on f6 in one move."
+    );
+    }
+
+    #[test]
+    fn test_validity_of_black_bishop_moving_to_corner_diagonal() {
+        // Black bishop on a3 (index 16), aiming to move to f8 (index 63).
+        // FEN visualization:
+        // 8 | . . . . . . . .
+        // 7 | . . . . . . . .
+        // 6 | . . . . . . . .
+        // 5 | . . . . . . . .
+        // 4 | . . . . . . . .
+        // 3 | b . . . . . . .
+        // 2 | . . . . . . . .
+        // 1 | . . . . . . . .
+        //     a b c d e f g h
+        // FEN: 8/8/8/8/8/b7/8/8 b - - 0 1
+        //
+        // Black bishop tries to move a3 -> f8 if the path is clear.
+
+        let fen = "8/8/8/8/8/b7/8/8 b - - 0 1";
+        let valid = validate_move_helper(fen, "a3f8", true);
+        assert!(
+            valid,
+            "Black bishop from a3 to h8 should be valid along an unobstructed diagonal."
+        );
+    }
+
+    #[test]
+    fn test_validity_of_rook_moving_one_square() {
+        let fen = "8/8/8/8/3R4/8/8/8 w - - 0 1";
+        let valid = validate_move_helper(fen, "d4d5", true);
+        assert!(
+            valid,
+            "Rook move from d4 to d5 should be valid as it's one square forward"
+        );
+    }
+
+    #[test]
+    fn test_validity_of_rook_moving_many_square() {
+        let fen = "8/8/8/8/3R4/8/8/8 w - - 0 1";
+        let valid = validate_move_helper(fen, "d4d8", true);
+        assert!(
+            valid,
+            "Rook move from d4 to d8 should be valid as it's forward"
+        );
+    }
+
+    #[test]
+    fn test_validity_of_rook_moving_vertically_up() {
+        // White rook on d4 moving to d7
+        let fen = "8/8/8/8/3R4/8/8/8 w - - 0 1";
+        let valid = validate_move_helper(fen, "d4d7", true);
+        assert!(
+            valid,
+            "Rook should be able to move vertically up from d4 to d7."
+        );
+    }
+
+    #[test]
+    fn test_validity_of_rook_moving_horizontally() {
+        // White rook on d4 moving to g4
+        let fen = "8/8/8/8/3R4/8/8/8 w - - 0 1";
+        let valid = validate_move_helper(fen, "d4g4", true);
+        assert!(
+            valid,
+            "Rook should be able to move horizontally from d4 to g4."
+        );
+    }
+
+    #[test]
+    fn test_invalidity_of_rook_moving_diagonally() {
+        // White rook on d4 attempting to move to e5 (diagonal)
+        let fen = "8/8/8/8/3R4/8/8/8 w - - 0 1";
+        let valid = validate_move_helper(fen, "d4e5", false);
+        assert!(
+            !valid,
+            "Rook moving from d4 to e5 (diagonal) should be invalid."
+        );
+    }
+
+    #[test]
+    fn test_rook_blocked_by_friendly_piece() {
+        // White rook on d4, White bishop on d5; rook tries to move to d6
+        // The bishop on d5 blocks it from moving further.
+        let fen = "8/8/8/3B4/3R4/8/8/8 w - - 0 1";
+        let valid = validate_move_helper(fen, "d4d6", false);
+        assert!(
+            !valid,
+            "Rook should be blocked by a friendly bishop on d5 and cannot reach d6."
+        );
+    }
+
+    #[test]
+    fn test_rook_blocked_then_capture_enemy_piece() {
+        // White rook on d4, Black knight on d5, White tries to move rook to d5 (capture).
+        // This should be valid but cannot move further to d6 in the same move.
+        let fen = "8/8/8/3n4/3R4/8/8/8 w - - 0 1";
+
+        // Capture on d5
+        let capture_valid = validate_move_helper(fen, "d4d5", true);
+        assert!(capture_valid, "Rook should capture the black knight on d5.");
+    }
+
+    #[test]
+    fn test_rook_blocked() {
+        let fen = "8/8/8/3n4/3R4/8/8/8 w - - 0 1";
+        // Attempt to move over the knight to d6 in a single move
+        let jump_invalid = validate_move_helper(fen, "d4d6", false);
+        assert!(
+            !jump_invalid,
+            "Rook cannot jump over an enemy piece at d5 to reach d6 in one move."
+        );
+    }
+
+    #[test]
+    fn test_bishop_cannot_move_straight_north() {
+        // White bishop on d4 trying to move to d5 (north)
+        let fen = "8/8/8/8/3B4/8/8/8 w - - 0 1";
+        let valid = validate_move_helper(fen, "d4d5", false);
+        assert!(
+            !valid,
+            "Bishop moving straight north (d4 to d5) should be invalid."
+        );
+    }
+
+    #[test]
+    fn test_bishop_cannot_move_straight_south() {
+        // White bishop on d4 trying to move to d3 (south)
+        let fen = "8/8/8/8/3B4/8/8/8 w - - 0 1";
+        let valid = validate_move_helper(fen, "d4d3", false);
+        assert!(
+            !valid,
+            "Bishop moving straight south (d4 to d3) should be invalid."
+        );
+    }
+
+    #[test]
+    fn test_bishop_cannot_move_straight_east() {
+        // White bishop on d4 trying to move to e4 (east)
+        let fen = "8/8/8/8/3B4/8/8/8 w - - 0 1";
+        let valid = validate_move_helper(fen, "d4e4", false);
+        assert!(
+            !valid,
+            "Bishop moving straight east (d4 to e4) should be invalid."
+        );
+    }
+
+    #[test]
+    fn test_bishop_cannot_move_straight_west() {
+        // White bishop on d4 trying to move to c4 (west)
+        let fen = "8/8/8/8/3B4/8/8/8 w - - 0 1";
+        let valid = validate_move_helper(fen, "d4c4", false);
+        assert!(
+            !valid,
+            "Bishop moving straight west (d4 to c4) should be invalid."
+        );
+    }
+
+    #[test]
+    fn test_moving_queen_horizontally() {
+        // White queen on d4 moving to h4
+        let fen = "8/8/8/8/3Q4/8/8/8 w - - 0 1";
+        let valid = validate_move_helper(fen, "d4h4", true);
+        assert!(
+            valid,
+            "Queen should be able to move horizontally from d4 to h4."
+        );
+    }
+
+    #[test]
+    fn test_moving_queen_vertically() {
+        // White queen on d4 moving to d8
+        let fen = "8/8/8/8/3Q4/8/8/8 w - - 0 1";
+        let valid = validate_move_helper(fen, "d4d8", true);
+        assert!(
+            valid,
+            "Queen should be able to move vertically from d4 to d8."
+        );
+    }
+
+    #[test]
+    fn test_validity_of_queen_move_one_square_right() {
+        // White queen on d4 moving one square horizontally to e4
+        let fen = "8/8/8/8/3Q4/8/8/8 w - - 0 1";
+        let valid = validate_move_helper(fen, "d4e4", true);
+        assert!(
+            valid,
+            "Queen should be able to move one square horizontally from d4 to e4."
+        );
+    }
+
+    #[test]
+    fn test_validity_of_queen_move_multiple_squares_vertically() {
+        // White queen on d4 moving multiple squares up to d8
+        let fen = "8/8/8/8/3Q4/8/8/8 w - - 0 1";
+        let valid = validate_move_helper(fen, "d4d8", true);
+        assert!(
+            valid,
+            "Queen should be able to move multiple squares vertically from d4 to d8."
+        );
+    }
+
+    #[test]
+    fn test_validity_of_queen_move_diagonal() {
+        // White queen on d4 moving diagonally to h8
+        let fen = "8/8/8/8/3Q4/8/8/8 w - - 0 1";
+        let valid = validate_move_helper(fen, "d4h8", true);
+        assert!(
+            valid,
+            "Queen should be able to move diagonally from d4 to h8."
+        );
+    }
+
+    #[test]
+    fn test_invalidity_of_queen_moving_like_knight() {
+        // White queen on d4 attempting a knight-like move to e6
+        let fen = "8/8/8/8/3Q4/8/8/8 w - - 0 1";
+        let valid = validate_move_helper(fen, "d4e6", false);
+        assert!(
+            !valid,
+            "Queen should not be able to move like a knight from d4 to e6."
+        );
+    }
+
+    #[test]
+    fn test_queen_blocked_by_friendly_piece() {
+        // White queen on d4, White pawn on d5; Queen cannot move to d6 in one move.
+        // The pawn on d5 blocks the Queen from moving further upward.
+        let fen = "8/8/8/3P4/3Q4/8/8/8 w - - 0 1";
+        let valid = validate_move_helper(fen, "d4d6", false);
+        assert!(
+            !valid,
+            "Queen should be blocked by a friendly pawn on d5 and cannot reach d6."
+        );
+    }
+
+    #[test]
+    fn test_queen_blocked_by_enemy_piece_cannot_jump_over() {
+        // White queen on d4, Black rook on d5, Black rook on d6
+        // The Queen can capture the rook on d5, but cannot jump over it to reach d6 in one move.
+        let fen = "8/8/8/3r4/3Q4/8/8/8 w - - 0 1";
+
+        // Capture on d5
+        let capture_valid = validate_move_helper(fen, "d4d5", true);
+        assert!(
+            capture_valid,
+            "Queen should be able to capture the black rook on d5."
+        );
+
+        // Attempt to move over the rook to d6 in a single move
+        let jump_invalid = validate_move_helper(fen, "d4d6", false);
+        assert!(
+            !jump_invalid,
+            "Queen cannot jump over an enemy piece on d5 to move to d6 in one move."
+        );
+    }
+
+    #[test]
+    fn test_validity_of_queen_capturing_diagonally() {
+        // White queen on d4, Black rook on f6
+        // The Queen should be able to move diagonally from d4 to f6, capturing the rook.
+        let fen = "8/8/8/5r2/3Q4/8/8/8 w - - 0 1";
+        let valid = validate_move_helper(fen, "d4f6", true);
+        assert!(
+            valid,
+            "Queen should be able to capture the black rook on f6 diagonally."
+        );
+    }
+
+    #[test]
+    fn test_invalidity_of_queen_capture_own_piece() {
+        // White queen on d4, White bishop on f6
+        // The Queen cannot capture its own bishop, so d4 -> f6 is invalid.
+        let fen = "8/8/5B2/8/3Q4/8/8/8 w - - 0 1";
+        let valid = validate_move_helper(fen, "d4f6", false);
+        assert!(
+            !valid,
+            "Queen should not be able to capture its own bishop on f6."
         );
     }
 }

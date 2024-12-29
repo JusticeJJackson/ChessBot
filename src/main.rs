@@ -1,9 +1,12 @@
 use board::Board;
 use chess_move::{validate_move, Move};
+use std::io::{self, Write};
 
 mod board;
 mod chess_move;
 mod utils;
+
+const STARTING_FEN: &str = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
 
 /*
 A  B  C  D  E  F  G  H
@@ -18,6 +21,32 @@ A  B  C  D  E  F  G  H
  0  1  2  3  4  5  6  7   1
  */
 fn main() {
-    let mut game_board =
-        Board::fen_to_board("rnbqkbnr/pppp1ppp/8/8/8/4p3/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    let mut game_board = Board::fen_to_board(STARTING_FEN);
+
+    game_board.display();
+    loop {
+        print!("Enter your move in UCI format: ");
+        io::stdout().flush().unwrap();
+
+        let mut input = String::new();
+        io::stdin().read_line(&mut input).unwrap();
+        let input = input.trim();
+
+        if input == "exit" {
+            break;
+        }
+
+        let m = Move::new(input.to_string());
+        let chess_move = validate_move(&game_board, &m);
+
+        if !chess_move {
+            println!("Invalid move");
+            continue;
+        }
+
+        game_board.move_peice(m);
+
+        print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
+        game_board.display();
+    }
 }
