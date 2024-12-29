@@ -199,7 +199,8 @@ impl Board {
 
         // Build bitboards
         let mut bitboards = [0; 12];
-        for (i, square) in squares.iter().enumerate() {
+        // reverse the squares to get the correct order
+        for (i, square) in squares.iter().rev().enumerate() {
             match square {
                 Square::Piece(piece) => {
                     let piece_type = piece.piece_type as usize;
@@ -289,7 +290,7 @@ impl Board {
         let mut fen = String::new();
 
         // Convert bitboards to a FEN position string
-        for rank in (0..8) {
+        for rank in 0..8 {
             let mut empty_count = 0;
 
             for file in 0..8 {

@@ -21,14 +21,9 @@ fn main() {
     let game_board =
         Board::fen_to_board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
 
-    game_board.display();
-
-    let pawn_bitboard = game_board.bitboards[0];
-
-    Board::display_bitboard(pawn_bitboard);
+    // game_board.display();
 
     let m = chess_move::Move::new("e2e4".to_string());
-    println!("{:?}", m);
 
     let valid = validate_move(&game_board, &m);
     println!("{}", valid);

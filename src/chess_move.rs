@@ -31,10 +31,113 @@ impl Move {
 
 pub fn validate_move(board: &Board, m: &Move) -> bool {
     // First, check to see if a piece is at the 'from' location
-    let color_to_move = board.active_color;
+    let piece_type = match find_peice_at_from_location(board, m) {
+        Some(pt) => pt,
+        None => {
+            println!("No piece found at '{}'", m.from);
+            return false;
+        } // No piece found at 'from'
+    };
 
+    // Validate the move based on the piece type
+    // Note: We check if the 'to' location is valid inside the validate functions to handle edge cases (e.g. castling)
+    let valid_move = match piece_type {
+        PieceType::Pawn => validate_pawn_move(board, m),
+        PieceType::Knight => validate_knight_move(board, m),
+        PieceType::Bishop => validate_bishop_move(board, m),
+        PieceType::Rook => validate_rook_move(board, m),
+        PieceType::Queen => validate_queen_move(board, m),
+        PieceType::King => validate_king_move(board, m),
+    };
+
+    if valid_move {
+        println!(
+            "Valid move: {:?} from index {} to index {}",
+            piece_type, m.from, m.to
+        );
+    } else {
+        println!(
+            "Invalid move: {:?} from index {} to index {}",
+            piece_type, m.from, m.to
+        );
+    }
+
+    valid_move
+}
+
+// By the time this is called we know the from location is valid
+// TODO: implement en passant
+fn validate_pawn_move(board: &Board, m: &Move) -> bool {
+    let valid_to_location = validate_to_location(board, m);
+
+    if !valid_to_location {
+        return false;
+    }
+
+    // check to see if the pawn moving to a valid location
+    let direction = match board.active_color {
+        Color::White => 1,
+        Color::Black => -1,
+    };
+
+    let from_rank = m.from / 8;
+    let to_rank = m.to / 8;
+
+    let from_file = m.from % 8;
+    let to_file = m.to % 8;
+
+    // Check if the pawn is moving forward one or two squares
+    let rank_diff = (to_rank as i8 - from_rank as i8);
+
+    if rank_diff != direction && rank_diff != 2 * direction {
+        println!(
+            "Invalid move: Pawn moving in the wrong direction, {} -> {}",
+            from_rank + 1,
+            to_rank + 1
+        );
+        return false;
+    }
+
+    // Check if the pawn is moving diagonally
+    if (to_file != from_file) {
+        return false;
+    }
+
+    // Check if the pawn is moving two squares forward
+    if (to_rank as i8 - from_rank as i8).abs() == 2 {
+        if (from_rank != 1 && board.active_color == Color::White)
+            || (from_rank != 6 && board.active_color == Color::Black)
+        {
+            println!(
+                "Invalid move: Pawn moving two squares forward from non starting rank {}",
+                from_rank + 1
+            );
+            return false;
+        }
+    }
+
+    true
+}
+
+fn validate_knight_move(board: &Board, m: &Move) -> bool {
+    true
+}
+fn validate_bishop_move(board: &Board, m: &Move) -> bool {
+    true
+}
+fn validate_rook_move(board: &Board, m: &Move) -> bool {
+    true
+}
+fn validate_queen_move(board: &Board, m: &Move) -> bool {
+    true
+}
+fn validate_king_move(board: &Board, m: &Move) -> bool {
+    true
+}
+
+fn find_peice_at_from_location(board: &Board, m: &Move) -> Option<PieceType> {
     // Obtain a slice of bitboards based on the active color
-    let bitboards: &[u64] = match color_to_move {
+    let bitboards: &[u64] = match board.active_color {
         Color::White => &board.bitboards[0..6], // First 6 bitboards for White
         Color::Black => &board.bitboards[6..12], // Last 6 bitboards for Black
     };
@@ -44,14 +147,13 @@ pub fn validate_move(board: &Board, m: &Move) -> bool {
     // Create a bitmask for the 'from' square
     let from_bit = 1u64 << m.from;
 
-
     // Find the index of the bitboard that has the 'from' bit set
-    let piece_at_from_idx = bitboards.iter().position(|&bb| bb & from_bit != 0);
+    let piecetype_at_from_idx = bitboards.iter().position(|&bb| bb & from_bit != 0);
 
-    dbg!("{:?}", piece_at_from_idx);
+    dbg!("{:?}", piecetype_at_from_idx);
     // If no piece is found at the 'from' square, the move is invalid
-    let piece_type = match piece_at_from_idx {
-        Some(idx) => match color_to_move {
+    let piece_type = match piecetype_at_from_idx {
+        Some(idx) => match board.active_color {
             Color::White => match idx {
                 0 => PieceType::Pawn,
                 1 => PieceType::Knight,
@@ -59,7 +161,7 @@ pub fn validate_move(board: &Board, m: &Move) -> bool {
                 3 => PieceType::Rook,
                 4 => PieceType::Queen,
                 5 => PieceType::King,
-                _ => return false, // Invalid index
+                _ => return None, // Invalid index
             },
             Color::Black => match idx {
                 0 => PieceType::Pawn,
@@ -68,22 +170,41 @@ pub fn validate_move(board: &Board, m: &Move) -> bool {
                 3 => PieceType::Rook,
                 4 => PieceType::Queen,
                 5 => PieceType::King,
-                _ => return false, // Invalid index
+                _ => return None, // Invalid index
             },
         },
-        None => return false, // No piece found at 'from'
+        None => {
+            println!("No piece found at 'from'");
+            return None;
+        } // No piece found at 'from'
     };
 
-    // At this point, you know the piece type at 'from'
-    // You can now implement further validation based on the piece type
-    // For example, checking if the move is legal for that piece
+    Some(piece_type)
+}
 
-    println!(
-        "Validating move: {:?} from index {} to index {}",
-        piece_type, m.from, m.to
-    );
+fn validate_to_location(board: &Board, m: &Move) -> bool {
+    let to_bit = 1u64 << m.to;
 
-    // TODO: Implement piece-specific move validation
+    // first check if the 'to' square is occupied by a non capturable piece (e.g. king + friendly piece)
+    let friendly_bitboards: &[u64] = match board.active_color {
+        Color::White => &board.bitboards[0..6], // First 6 bitboards for White
+        Color::Black => &board.bitboards[6..12], // Last 6 bitboards for Black
+    };
 
-    true
+    let friendly_piece_at_to = friendly_bitboards.iter().any(|&bb| bb & to_bit != 0);
+
+    let enemy_king_bitboard = match board.active_color {
+        Color::White => board.bitboards[11], // Black king
+        Color::Black => board.bitboards[5],  // White king
+    };
+
+    let enemy_king_at_to = enemy_king_bitboard & to_bit != 0;
+
+    if friendly_piece_at_to {
+        println!("Attempting to capture friendly piece at '{}'", m.to);
+    } else if enemy_king_at_to {
+        println!("Attempting to capture enemy king at '{}'", m.to);
+    }
+
+    return (!friendly_piece_at_to) && (!enemy_king_at_to);
 }
