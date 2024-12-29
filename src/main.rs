@@ -18,13 +18,23 @@ A  B  C  D  E  F  G  H
  0  1  2  3  4  5  6  7   1
  */
 fn main() {
-    let game_board =
-        Board::fen_to_board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
+    // let game_board =
+    //     Board::fen_to_board("rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
 
-    // game_board.display();
+    let game_board = Board::fen_to_board("8/8/8/8/8/8/3PP3/8 w - - 0 1");
 
+    game_board.display();
+
+    println!("{:064b}", game_board.bitboards[0]);
+    let test_bitboard: u64 = 1 << 12 | 1 << 11;
+    println!("{:064b}", test_bitboard);
     let m = chess_move::Move::new("e2e4".to_string());
+    // let m = chess_move::Move::new("e3d4".to_string());
+    // let bitmask = 1u64 << m.from;
+    // println!("{:064b}", bitmask);
 
     let valid = validate_move(&game_board, &m);
     println!("{}", valid);
+
+    
 }

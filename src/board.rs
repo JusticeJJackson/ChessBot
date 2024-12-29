@@ -1,5 +1,19 @@
 pub struct Board {
     pub bitboards: [u64; 12],
+    /*
+    0: White Pawns
+    1: White Knights
+    2: White Bishops
+    3: White Rooks
+    4: White Queens
+    5: White King
+    6: Black Pawns
+    7: Black Knights
+    8: Black Bishops
+    9: Black Rooks
+    10: Black Queens
+    11: Black King
+     */
     pub active_color: Color,
     pub castling_rights: u8,       // Use a bitmask for castling rights
     pub en_passant: Option<usize>, // Target square index for en passant
@@ -385,5 +399,27 @@ impl Board {
         fen.push_str(&self.fullmove_number.to_string());
 
         fen
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_fen_to_positions_for_one_pawn() {
+        let fen = "8/8/8/8/8/8/4P3/8 w - - 0 1";
+        let squares = Board::fen_to_board(fen);
+
+        assert_eq!(squares.bitboards[0], 1 << 12);
+    }
+
+    #[test]
+    fn test_fen_to_position_for_two_pawns() {
+        let fen = "8/8/8/8/8/8/3PP3/8 w - - 0 1";
+        let squares = Board::fen_to_board(fen);
+
+        let test_bitboard: u64 = 1 << 12 | 1 << 11;
+        assert_eq!(squares.bitboards[0], test_bitboard);
     }
 }
