@@ -457,12 +457,6 @@ impl Board {
             // 1. Move the piece
 
             // update the bitboards
-
-            let friendly_bitboards = match self.active_color {
-                Color::White => &self.bitboards[0..6],
-                Color::Black => &self.bitboards[6..12],
-            };
-
             let enemy_bitboards = match self.active_color {
                 Color::White => &self.bitboards[6..12],
                 Color::Black => &self.bitboards[0..6],
@@ -507,12 +501,23 @@ impl Board {
                     Color::Black => 6,
                 }] &= !(1 << m.from);
 
-            // Add the peice being moved to the 'to' location for its given bitboard
-            self.bitboards[peice_type as usize
-                + match self.active_color {
-                    Color::White => 0,
-                    Color::Black => 6,
-                }] |= 1 << m.to;
+            // Placing our peice in its new location
+            if m.promotion.is_none() {
+                // Add the peice being moved to the 'to' location for its given bitboard
+                self.bitboards[peice_type as usize
+                    + match self.active_color {
+                        Color::White => 0,
+                        Color::Black => 6,
+                    }] |= 1 << m.to;
+            }
+            // We are promoting the pawn and placing the new peice on the 'to' location
+            else {
+                self.bitboards[m.promotion.unwrap() as usize
+                    + match self.active_color {
+                        Color::White => 0,
+                        Color::Black => 6,
+                    }] |= 1 << m.to;
+            }
             // 2. Update castling rights
             if peice_type == PieceType::King {
                 match m.from {
@@ -611,7 +616,7 @@ mod tests {
 
     fn test_pawn_capture() {
         let fen = "8/8/8/8/8/5p2/4P3/8 w - - 0 1".to_string();
-        
+
         let mut board = Board::fen_to_board(&fen);
 
         let m = Move {
@@ -627,5 +632,36 @@ mod tests {
 
         assert_eq!(board.bitboards[0], expected_white_bitboard);
         assert_eq!(board.bitboards[6], expected_black_bitboard);
+    }
+
+    #[test]
+    fn test_pawn_promotion() {
+        let fen = "8/4P3/8/8/8/8/8/8 w - - 0 1".to_string();
+
+        let mut board = Board::fen_to_board(&fen);
+
+        let m = Move::new("e7e8q".to_string());
+
+        assert!(board.move_peice(m));
+
+        let expected_white_bitboard: u64 = 1 << 60;
+        assert_eq!(board.bitboards[4], expected_white_bitboard);
+        assert_eq!(board.bitboards[0], 0);
+    }
+
+    #[test]
+    fn test_pawn_promotion_and_capture() {
+        let fen = "5p2/4P3/8/8/8/8/8/8 w - - 0 1".to_string();
+
+        let mut board = Board::fen_to_board(&fen);
+
+        let m = Move::new("e7f8q".to_string());
+
+        assert!(board.move_peice(m));
+
+        let expected_white_bitboard: u64 = 1 << 61;
+        assert_eq!(board.bitboards[4], expected_white_bitboard);
+        assert_eq!(board.bitboards[0], 0);
+        assert_eq!(board.bitboards[6], 0);
     }
 }

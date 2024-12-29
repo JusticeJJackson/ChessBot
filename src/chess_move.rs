@@ -39,6 +39,14 @@ pub fn validate_move(board: &Board, m: &Move) -> bool {
         } // No piece found at 'from'
     };
 
+    // Ensure that peice is not promoting if its not a pawn
+    if piece_type != PieceType::Pawn {
+        if m.promotion.is_some() {
+            println!("Invalid move: Non-pawn piece attempting to promote");
+            return false;
+        }
+    }
+
     // Validate the move based on the piece type
     // Note: We check if the 'to' location is valid inside the validate functions to handle edge cases (e.g. castling)
     let valid_move = match piece_type {
@@ -155,6 +163,22 @@ fn validate_pawn_move(board: &Board, m: &Move) -> bool {
                 println!(
                     "Invalid move: Pawn moving two squares forward when square in front is occupied"
                 );
+                return false;
+            }
+        }
+    }
+
+    // Check if the pawn is moving to the last rank
+    if to_rank == 0 || to_rank == 7 {
+        if m.promotion.is_none() {
+            println!("Invalid move: Pawn moving to last rank without promotion");
+            return false;
+        } else {
+            // Check to see if promotion peice type is valid
+            let promotion_piece = m.promotion.unwrap();
+
+            if promotion_piece == PieceType::Pawn || promotion_piece == PieceType::King {
+                println!("Invalid move: Pawn promotion to invalid piece type");
                 return false;
             }
         }
@@ -409,6 +433,102 @@ mod tests {
     // }
 
     // TODO: Add Test for for promotion
+
+    #[test]
+    fn test_validity_of_white_pawn_promotion_to_queen() {
+        // White pawn on h7, ready to promote
+        let fen = "8/7P/8/8/8/8/8/8 w - - 0 1";
+        // White to move, h7 to h8 (queen promotion)
+        let valid = validate_move_helper(fen, "h7h8q", true);
+        assert!(
+            valid,
+            "Pawn promotion h7h8q should be valid for a white pawn promoting to a queen."
+        );
+    }
+
+    #[test]
+    fn test_validity_of_black_pawn_promotion_to_queen() {
+        // Black pawn on a2, ready to promote (note that it's Black to move)
+        let fen = "8/8/8/8/8/8/p7/7K b - - 0 1";
+        // Black to move, a2 to a1 (queen promotion)
+        let valid = validate_move_helper(fen, "a2a1q", true);
+        assert!(
+            valid,
+            "Pawn promotion a2a1q should be valid for a black pawn promoting to a queen."
+        );
+    }
+
+    #[test]
+    fn test_invalidity_of_pawn_promotion_on_seventh_rank() {
+        // White pawn on h6, not on the last rank
+        let fen = "8/8/8/8/8/7P/8/7K w - - 0 1";
+        // White tries to promote from h6 to h7 (incorrect rank for promotion)
+        let valid = validate_move_helper(fen, "h6h7q", false);
+        assert!(
+            !valid,
+            "Pawn promotion from h6 to h7 should be invalid since it's not the last rank."
+        );
+    }
+
+    #[test]
+    fn test_invalidity_of_pawn_promoting_to_king() {
+        // White pawn on h7, ready to promote
+        let fen = "8/8/8/8/8/8/7P/7K w - - 0 1";
+        // White tries to promote to a king (which should be invalid)
+        let valid = validate_move_helper(fen, "h7h8k", false);
+        assert!(
+            !valid,
+            "Pawn promotion h7h8k should be invalid, as promoting to a king is not allowed."
+        );
+    }
+
+    #[test]
+    fn test_invalidity_of_pawn_promoting_to_pawn() {
+        // White pawn on h7, ready to promote
+        let fen = "8/8/8/8/8/8/7P/7K w - - 0 1";
+        // White tries to promote to another pawn (which should be invalid)
+        let valid = validate_move_helper(fen, "h7h8p", false);
+        assert!(
+            !valid,
+            "Pawn promotion h7h8p should be invalid, as promoting to a pawn is not allowed."
+        );
+    }
+
+    #[test]
+    fn test_validity_of_white_pawn_promotion_to_rook() {
+        // White pawn on e7, ready to promote
+        let fen = "8/4P3/8/8/8/8/8/8 w - - 0 1";
+        // White to move, e7 to e8 (rook promotion)
+        let valid = validate_move_helper(fen, "e7e8r", true);
+        assert!(
+            valid,
+            "Pawn promotion e7e8r should be valid for a white pawn promoting to a rook."
+        );
+    }
+
+    #[test]
+    fn test_validity_of_white_pawn_promotion_to_knight() {
+        // White pawn on b7, ready to promote
+        let fen = "8/1P6/8/8/8/8/8/8 w - - 0 1";
+        // White to move, b7 to b8 (knight promotion)
+        let valid = validate_move_helper(fen, "b7b8n", true);
+        assert!(
+            valid,
+            "Pawn promotion b7b8n should be valid for a white pawn promoting to a knight."
+        );
+    }
+
+    #[test]
+    fn test_validity_of_white_pawn_promotion_to_bishop() {
+        // White pawn on c7, ready to promote
+        let fen = "8/2P5/8/8/8/8/8/8 w - - 0 1";
+        // White to move, c7 to c8 (bishop promotion)
+        let valid = validate_move_helper(fen, "c7c8b", true);
+        assert!(
+            valid,
+            "Pawn promotion c7c8b should be valid for a white pawn promoting to a bishop."
+        );
+    }
 
     /// Test: Pawn move at the edge of the board (file 'a').
     #[test]
