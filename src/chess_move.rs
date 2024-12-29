@@ -444,16 +444,14 @@ mod tests {
     #[test]
     fn test_validitiy_of_pawn_move_to_friendly_occupied_square_invalid() {
         let fen = "rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 1"; // White pawns on d4 and e2
-        let m = Move::new("d4d5".to_string()); // White pawn on d4 attempts to move to d5, which is empty
-        let valid = validate_move_helper(fen, "d4d5", true);
+        let valid = validate_move_helper(fen, "d4d5", true); // White pawn on d4 attempts to move to d5, which is empty
         assert!(
             valid,
             "Pawn move from d4 to d5 should be valid as the square is empty"
         );
 
         let fen_friendly = "rnbqkbnr/pppppppp/8/8/3P4/3P4/PPP1PPPP/RNBQKBNR w KQkq - 0 1"; // White pawns on d4 and d3
-        let m_friendly = Move::new("d4d3".to_string()); // White pawn on d4 attempts to move backward to d3 (invalid)
-        let valid_friendly = validate_move_helper(fen_friendly, "d4d3", false);
+        let valid_friendly = validate_move_helper(fen_friendly, "d4d3", false); // White pawn on d4 attempts to move backward to d3 (invalid)
         assert!(
             !valid_friendly,
             "Pawn move from d4 to d3 should be invalid as pawns cannot move backward"
@@ -464,8 +462,7 @@ mod tests {
     #[test]
     fn test_validitiy_of_pawn_move_two_squares_non_initial_rank_invalid() {
         let fen = "rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR w KQkq - 0 1"; // White pawn on d4
-        let m = Move::new("d4d6".to_string()); // White pawn attempts to move two squares forward from d4 to d6
-        let valid = validate_move_helper(fen, "d4d6", false);
+        let valid = validate_move_helper(fen, "d4d6", false); // White pawn attempts to move two squares forward from d4 to d6
         assert!(
             !valid,
             "Pawn move from d4 to d6 should be invalid as it's not the initial position"
@@ -476,8 +473,7 @@ mod tests {
     #[test]
     fn test_validitiy_of_pawn_move_two_squares_blocked_invalid() {
         let fen = "rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b KQkq - 0 1"; // White pawn on e3
-        let m = Move::new("e3e5".to_string()); // White pawn attempts to move two squares forward from e3 to e5
-        let valid = validate_move_helper(fen, "e3e5", false);
+        let valid = validate_move_helper(fen, "e3e5", false); // White pawn attempts to move two squares forward from e3 to e5
         assert!(
             !valid,
             "Pawn move from e3 to e5 should be invalid as the path is blocked"

@@ -606,4 +606,26 @@ mod tests {
         assert_eq!(board.bitboards[0], expected_white_bitboard);
         assert_eq!(board.bitboards[6], expected_black_bitboard);
     }
+
+    #[test]
+
+    fn test_pawn_capture() {
+        let fen = "8/8/8/8/8/5p2/4P3/8 w - - 0 1".to_string();
+        
+        let mut board = Board::fen_to_board(&fen);
+
+        let m = Move {
+            from: 12,
+            to: 21,
+            promotion: None,
+        };
+
+        assert!(board.move_peice(m));
+
+        let expected_white_bitboard: u64 = 1 << 21;
+        let expected_black_bitboard: u64 = 0;
+
+        assert_eq!(board.bitboards[0], expected_white_bitboard);
+        assert_eq!(board.bitboards[6], expected_black_bitboard);
+    }
 }

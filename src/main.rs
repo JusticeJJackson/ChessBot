@@ -20,24 +20,4 @@ A  B  C  D  E  F  G  H
 fn main() {
     let mut game_board =
         Board::fen_to_board("rnbqkbnr/pppp1ppp/8/8/8/4p3/PPPPPPPP/RNBQKBNR w KQkq - 0 1");
-
-    game_board.display();
-
-    let m = Move::new("a2a3".to_string());
-
-    game_board.move_peice(m);
-
-    game_board.display();
-
-    let m = Move::new("a7a5".to_string());
-
-    game_board.move_peice(m);
-
-    game_board.display();
-
-    let m = Move::new("f2e3".to_string());
-
-    game_board.move_peice(m);
-
-    game_board.display();
 }
