@@ -49,6 +49,9 @@ enum Square {
 
 pub struct Board {
     pub bitboards: [u64; 12],
+    //TODO add white and black occupancy bitboards
+    pub all_white_bitboard: u64,
+    pub all_black_bitboard: u64,
     /*
     0: White Pawns
     1: White Knights
@@ -250,11 +253,17 @@ impl Board {
 
         // Build bitboards based on squares
         let mut bitboards = [0u64; 12];
+        let mut all_white_bitboard: u64 = 0;
+        let mut all_black_bitboard: u64 = 0;
         for (sq_index, square) in squares.iter().enumerate() {
             if let Square::Piece(piece) = square {
                 let piece_type_index = piece.piece_type as usize;
                 let color_offset = piece.color as usize * 6;
                 bitboards[color_offset + piece_type_index] |= 1 << sq_index;
+                match piece.color {
+                    Color::White => all_white_bitboard |= 1 << sq_index,
+                    Color::Black => all_black_bitboard |= 1 << sq_index,
+                }
             }
         }
 
@@ -265,6 +274,8 @@ impl Board {
             en_passant,
             halfmove_clock,
             fullmove_number,
+            all_white_bitboard: all_white_bitboard,
+            all_black_bitboard: all_black_bitboard,
         }
     }
 
@@ -492,6 +503,12 @@ impl Board {
                     }
                     None => return false,
                 }
+
+                // remove from the all white or all black bitboard
+                match self.active_color {
+                    Color::White => self.all_black_bitboard &= !to_bit,
+                    Color::Black => self.all_white_bitboard &= !to_bit,
+                }
             }
 
             // Remove the peice being moved from the 'from' location for its given bitboard
@@ -500,6 +517,11 @@ impl Board {
                     Color::White => 0,
                     Color::Black => 6,
                 }] &= !(1 << m.from);
+
+            match self.active_color {
+                Color::White => self.all_white_bitboard &= !(1 << m.from),
+                Color::Black => self.all_black_bitboard &= !(1 << m.from),
+            }
 
             // Placing our peice in its new location
             if m.promotion.is_none() {
@@ -517,6 +539,12 @@ impl Board {
                         Color::White => 0,
                         Color::Black => 6,
                     }] |= 1 << m.to;
+            }
+
+            // no matter what we always update the all_white_bitboard or all_black_bitboard
+            match self.active_color {
+                Color::White => self.all_white_bitboard |= 1 << m.to,
+                Color::Black => self.all_black_bitboard |= 1 << m.to,
             }
             // 2. Update castling rights
             if peice_type == PieceType::King {
@@ -663,5 +691,35 @@ mod tests {
         assert_eq!(board.bitboards[4], expected_white_bitboard);
         assert_eq!(board.bitboards[0], 0);
         assert_eq!(board.bitboards[6], 0);
+    }
+
+    #[test]
+    fn test_all_bitboard_matches_combination_of_bitboards() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+        let board = Board::fen_to_board(&fen);
+
+        let folded_white_bitboard = board.bitboards[0..6].iter().fold(0, |acc, &bb| acc | bb);
+        let folded_black_bitboard = board.bitboards[6..12].iter().fold(0, |acc, &bb| acc | bb);
+
+        assert_eq!(board.all_white_bitboard, folded_white_bitboard);
+        assert_eq!(board.all_black_bitboard, folded_black_bitboard);
+    }
+
+    #[test]
+    fn test_bitboards_matching_after_moves() {
+        let fen = "rnbqkbnr/pppp1ppp/8/8/8/4p3/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+
+        let mut board = Board::fen_to_board(&fen);
+
+        let m = Move::new("f2e3".to_string());
+
+        assert!(board.move_peice(m));
+
+        let folded_white_bitboard = board.bitboards[0..6].iter().fold(0, |acc, &bb| acc | bb);
+        let folded_black_bitboard = board.bitboards[6..12].iter().fold(0, |acc, &bb| acc | bb);
+
+        assert_eq!(board.all_white_bitboard, folded_white_bitboard);
+        assert_eq!(board.all_black_bitboard, folded_black_bitboard);
     }
 }

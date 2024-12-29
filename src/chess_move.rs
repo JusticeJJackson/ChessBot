@@ -4,7 +4,6 @@ use crate::board::PieceType;
 use crate::utils::convert_board_coordinate_to_idx;
 use crate::utils::EDGE_DISTANCES;
 use std::collections::HashSet;
-use std::hash::Hash;
 
 // Uses UCI Notation
 #[derive(Debug, Clone)]
@@ -99,7 +98,7 @@ fn validate_pawn_move(board: &Board, m: &Move) -> bool {
     let to_file = m.to % 8;
 
     // Check if the pawn is moving forward one or two squares
-    let rank_diff = (to_rank as i8 - from_rank as i8);
+    let rank_diff = to_rank as i8 - from_rank as i8;
 
     if rank_diff != direction && rank_diff != 2 * direction {
         println!(
@@ -209,9 +208,11 @@ fn validate_bishop_move(board: &Board, m: &Move) -> bool {
 
     if !moves.contains(&m.to) {
         println!(
-            "Invalid move: Bishop moving to an invalid location {}",
+            "Invalid move: Bishop moving to an square not within its range {}",
             m.to
         );
+
+        println!("{:?}", moves);
         return false;
     }
 
@@ -257,6 +258,116 @@ fn validate_queen_move(board: &Board, m: &Move) -> bool {
     true
 }
 fn validate_king_move(board: &Board, m: &Move) -> bool {
+    // Check white side castling
+    if m.from == 4 && m.to == 6 {
+        // White king side castle
+        return validate_king_side_castle(board, board.active_color);
+    }
+    if m.from == 4 && m.to == 2 {
+        // White queen side castle
+        return validate_queen_side_castle(board, board.active_color);
+    }
+
+    // Check black side castling
+    if m.from == 60 && m.to == 62 {
+        // Black king side castle
+        return validate_king_side_castle(board, board.active_color);
+    }
+    if m.from == 60 && m.to == 58 {
+        // Black queen side castle
+        return validate_queen_side_castle(board, board.active_color);
+    }
+
+    // Ensures we are not capturing a friendly piece or the enemy king
+    let valid_to_location = validate_to_location(board, m);
+
+    if !valid_to_location {
+        println!("Invalid move: King moving to an invalid location {}", m.to);
+        return false;
+    }
+
+    // ensure the king is moving only one square away
+    let rank_diff = (m.to / 8) as i8 - (m.from / 8) as i8;
+    let file_diff = (m.to % 8) as i8 - (m.from % 8) as i8;
+
+    if rank_diff.abs() > 1 || file_diff.abs() > 1 {
+        println!("Invalid move: King moving more than one square away");
+        return false;
+    }
+
+    true
+}
+
+fn validate_king_side_castle(board: &Board, color: Color) -> bool {
+    // check to see if the king has rights to castle
+    let rights = board.castling_rights;
+
+    let number_to_check = match color {
+        Color::White => 1,
+        Color::Black => 4,
+    };
+
+    if rights & number_to_check == 0 {
+        println!("Invalid move: King does not have rights to castle");
+        return false;
+    }
+
+    // check to see if the squares between the king and rook are empty
+    let squares_to_check = match color {
+        Color::White => [5, 6],
+        Color::Black => [61, 62],
+    };
+
+    for square in squares_to_check.iter() {
+        let square_bit = 1u64 << *square;
+        let square_occupied = match color {
+            Color::White => board.all_white_bitboard & square_bit != 0,
+            Color::Black => board.all_black_bitboard & square_bit != 0,
+        };
+
+        if square_occupied {
+            println!("Invalid move: Square {} is occupied", square);
+            return false;
+        }
+    }
+
+    // TODO add check to see if the king is in check
+    true
+}
+
+fn validate_queen_side_castle(board: &Board, color: Color) -> bool {
+    // check to see if the king has rights to castle
+    let rights = board.castling_rights;
+
+    let number_to_check = match color {
+        Color::White => 2,
+        Color::Black => 8,
+    };
+
+    if rights & number_to_check == 0 {
+        println!("Invalid move: King does not have rights to castle");
+        return false;
+    }
+
+    // check to see if the squares between the king and rook are empty
+    let squares_to_check = match color {
+        Color::White => [3, 2, 1],
+        Color::Black => [59, 58, 57],
+    };
+
+    for square in squares_to_check.iter() {
+        let square_bit = 1u64 << *square;
+        let square_occupied = match color {
+            Color::White => board.all_white_bitboard & square_bit != 0,
+            Color::Black => board.all_black_bitboard & square_bit != 0,
+        };
+
+        if square_occupied {
+            println!("Invalid move: Square {} is occupied", square);
+            return false;
+        }
+    }
+
     true
 }
 
@@ -268,9 +379,9 @@ pub fn generate_sliding_moves(board: &Board, piece_type: PieceType, m: &Move) ->
         Color::Black => &board.bitboards[0..5],  // First 5 bitboards for White (Excluding King)
     };
 
-    let friendly_bitboards: &[u64] = match board.active_color {
-        Color::White => &board.bitboards[0..6], // First 6 bitboards for White
-        Color::Black => &board.bitboards[6..12], // Last 6 bitboards for Black
+    let friendly_bitboard: u64 = match board.active_color {
+        Color::White => board.all_white_bitboard, // First 6 bitboards for White
+        Color::Black => board.all_black_bitboard, // Last 6 bitboards for Black
     };
 
     let enemy_king_bitboard = match board.active_color {
@@ -293,13 +404,9 @@ pub fn generate_sliding_moves(board: &Board, piece_type: PieceType, m: &Move) ->
                     let hop_distance = distance_to_jump[i] * hop_distance_multiplier as i8;
 
                     let to: u8 = ((m.from as i8) + hop_distance) as u8;
-
-                    // dbg!("{:?}", to);
                     let to_bit: u64 = 1u64 << to;
                     // if the square is occupied by a friendly piece or the enemy king, stop
-                    if friendly_bitboards.iter().any(|&bb| bb & to_bit != 0)
-                        || enemy_king_bitboard & to_bit != 0
-                    {
+                    if friendly_bitboard & to_bit != 0 || enemy_king_bitboard & to_bit != 0 {
                         break;
                     }
 
@@ -342,9 +449,7 @@ pub fn generate_sliding_moves(board: &Board, piece_type: PieceType, m: &Move) ->
                     let to_bit: u64 = 1u64 << to_u8;
 
                     // If friendly piece or enemy king occupies this square, stop.
-                    if friendly_bitboards.iter().any(|&bb| bb & to_bit != 0)
-                        || enemy_king_bitboard & to_bit != 0
-                    {
+                    if friendly_bitboard & to_bit != 0 || enemy_king_bitboard & to_bit != 0 {
                         break;
                     }
 
@@ -423,12 +528,12 @@ fn validate_to_location(board: &Board, m: &Move) -> bool {
     let to_bit = 1u64 << m.to;
 
     // first check if the 'to' square is occupied by a non capturable piece (e.g. king + friendly piece)
-    let friendly_bitboards: &[u64] = match board.active_color {
-        Color::White => &board.bitboards[0..6], // First 6 bitboards for White
-        Color::Black => &board.bitboards[6..12], // Last 6 bitboards for Black
+    let friendly_bitboard: u64 = match board.active_color {
+        Color::White => board.all_white_bitboard, // First 6 bitboards for White
+        Color::Black => board.all_black_bitboard, // Last 6 bitboards for Black
     };
 
-    let friendly_piece_at_to = friendly_bitboards.iter().any(|&bb| bb & to_bit != 0);
+    let friendly_piece_at_to = friendly_bitboard & to_bit != 0;
 
     let enemy_king_bitboard = match board.active_color {
         Color::White => board.bitboards[11], // Black king
@@ -1314,6 +1419,101 @@ mod tests {
         assert!(
             !valid,
             "Queen should not be able to capture its own bishop on f6."
+        );
+    }
+
+    #[test]
+    fn test_white_kingside_castle() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/4NPPB/PPPPP2P/RNBQK2R w K - 0 1";
+        let valid = validate_move_helper(fen, "e1g1", true);
+
+        assert!(
+            valid,
+            "White should be able to castle kingside from e1 to g1."
+        );
+    }
+
+    #[test]
+    fn test_white_kingside_castle_without_rights() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/4NPPB/PPPPP2P/RNBQK2R w Qkq - 0 1";
+        let valid = validate_move_helper(fen, "e1g1", false);
+
+        assert!(
+            !valid,
+            "White should not be able to castle kingside from e1 to g1 due to lack of castling rights."
+        );
+    }
+
+    #[test]
+    fn test_white_queenside_castle_with_rights() {
+        let fen = "rnbqkbnr/pppppppp/8/8/3P4/2NQ4/PPPBPPPP/R3KBNR w KQkq - 0 1";
+        let valid = validate_move_helper(fen, "e1c1", true);
+        assert!(
+            valid,
+            "White should be able to castle queenside from e1 to c1."
+        )
+    }
+
+    #[test]
+    fn test_white_queenside_castle_without_rights() {
+        let fen = "rnbqkbnr/pppppppp/8/8/3P4/2NQ4/PPPBPPPP/R3KBNR w Kkq - 0 1";
+        let valid = validate_move_helper(fen, "e1c1", false);
+        assert!(
+            !valid,
+            "White should be able to castle queenside from e1 to c1."
+        )
+    }
+
+    #[test]
+    fn test_black_kingside_castle() {
+        let fen = "rnbqk2r/pppp1ppp/3bpn2/8/8/8/PPPPPPPP/RNBQKBNR b KQkq - 0 1";
+        let valid = validate_move_helper(fen, "e8g8", true);
+
+        assert!(
+            valid,
+            "Black should be able to castle kingside from e8 to g8."
+        );
+    }
+
+    #[test]
+    fn test_black_kingside_castle_without_rights() {
+        let fen = "rnbqk2r/pppp1ppp/3bpn2/8/8/8/PPPPPPPP/RNBQKBNR b KQq - 0 1";
+        let valid = validate_move_helper(fen, "e8g8", false);
+
+        assert!(
+            !valid,
+            "Black should be able to castle kingside from e8 to g8."
+        );
+    }
+
+    #[test]
+    fn test_black_queenside_castle_with_rights() {
+        let fen = "r3kbnr/ppp1pppp/2nqb3/3p4/8/8/PPPPPPPP/RNBQKBNR b q - 0 1";
+        let valid = validate_move_helper(fen, "e8c8", true);
+        assert!(
+            valid,
+            "Black should be able to castle queenside from e8 to c8."
+        )
+    }
+
+    #[test]
+    fn test_black_queenside_castle_without_rights() {
+        let fen = "r3kbnr/ppp1pppp/2nqb3/3p4/8/8/PPPPPPPP/RNBQKBNR b KQk - 0 1";
+        let valid = validate_move_helper(fen, "e8c8", false);
+        assert!(
+            !valid,
+            "Black should be able to castle queenside from e8 to c8."
+        )
+    }
+
+    #[test]
+    fn test_castling_is_invalid_when_blocked() {
+        let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
+        let valid = validate_move_helper(fen, "e1g1", false);
+
+        assert!(
+            !valid,
+            "White should not be able to castle from starting position"
         );
     }
 }
