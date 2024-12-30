@@ -1,3 +1,5 @@
+use std::thread::available_parallelism;
+
 use crate::board::Board;
 use crate::board::Color;
 use crate::board::PieceType;
@@ -32,10 +34,10 @@ impl Move {
 
 pub fn validate_move(board: &Board, m: &Move) -> bool {
     // First, check to see if a piece is at the 'from' location
-    let piece_type = match find_peice_at_from_location(board, m) {
+    let piece_type = match find_peice_at_from_location(board, m.from) {
         Some(pt) => pt,
         None => {
-            println!("No piece found at '{}'", m.from);
+            println!("No piece friendly found at '{}'", m.from);
             return false;
         } // No piece found at 'from'
     };
@@ -114,7 +116,7 @@ fn validate_pawn_move(board: &Board, m: &Move) -> bool {
         return false;
     }
 
-    // If pawn is moving diagonally, it must be capturing an enemy piece
+    // If pawn is moving diagonally, it must be capturing an enemy piece unless its en passant
     if (to_file as i8 - from_file as i8).abs() == 1 {
         let to_bit = 1u64 << m.to;
         let bitboards = match board.active_color {
@@ -123,6 +125,14 @@ fn validate_pawn_move(board: &Board, m: &Move) -> bool {
         };
 
         let enemy_piece_at_to = bitboards.iter().any(|&bb| bb & to_bit != 0);
+
+        // check for en pessant
+        if (board.en_passant.is_some()) && (m.to == board.en_passant.unwrap()) {
+            if m.to == board.en_passant.unwrap() {
+                return true;
+            }
+        }
+        // check if the pawn is moving diagonally without capturing
 
         if !enemy_piece_at_to {
             println!("Invalid move: Pawn moving diagonally without capturing");
@@ -189,6 +199,30 @@ fn validate_pawn_move(board: &Board, m: &Move) -> bool {
 }
 
 fn validate_knight_move(board: &Board, m: &Move) -> bool {
+    let valid_to_location = validate_to_location(board, m);
+
+    if !valid_to_location {
+        println!(
+            "Invalid move: Knight moving to an invalid location {}",
+            m.to
+        );
+        return false;
+    }
+
+    let from_rank = m.from / 8;
+    let to_rank = m.to / 8;
+
+    let from_file = m.from % 8;
+    let to_file = m.to % 8;
+
+    let rank_diff = (to_rank as i8 - from_rank as i8).abs();
+    let file_diff = (to_file as i8 - from_file as i8).abs();
+
+    // Check if the knight is not moving in an L shape
+    if !((rank_diff == 2 && file_diff == 1) || (rank_diff == 1 && file_diff == 2)) {
+        return false;
+    }
+
     true
 }
 fn validate_bishop_move(board: &Board, m: &Move) -> bool {
@@ -479,7 +513,7 @@ pub fn generate_sliding_moves(board: &Board, piece_type: PieceType, m: &Move) ->
     }
     moves
 }
-pub fn find_peice_at_from_location(board: &Board, m: &Move) -> Option<PieceType> {
+pub fn find_peice_at_from_location(board: &Board, from: u8) -> Option<PieceType> {
     // Obtain a slice of bitboards based on the active color
     let bitboards: &[u64] = match board.active_color {
         Color::White => &board.bitboards[0..6], // First 6 bitboards for White
@@ -489,7 +523,7 @@ pub fn find_peice_at_from_location(board: &Board, m: &Move) -> Option<PieceType>
     // dbg!("{}", color_to_move);
 
     // Create a bitmask for the 'from' square
-    let from_bit = 1u64 << m.from;
+    let from_bit = 1u64 << from;
 
     // Find the index of the bitboard that has the 'from' bit set
     let piecetype_at_from_idx = bitboards.iter().position(|&bb| bb & from_bit != 0);
@@ -553,6 +587,83 @@ fn validate_to_location(board: &Board, m: &Move) -> bool {
     return (!friendly_piece_at_to) && (!enemy_king_at_to);
 }
 
+fn generate_all_moves_for_color(board: &Board) -> Vec<Move> {
+    let mut all_moves = Vec::new();
+
+    let bitboards: &u64 = match board.active_color {
+        Color::White => &board.all_white_bitboard, // First 6 bitboards for White
+        Color::Black => &board.all_black_bitboard, // Last 6 bitboards for Black
+    };
+
+    let indexs_of_all_friendly_pieces = convert_bitboards_to_indexs(*bitboards);
+
+    for from in indexs_of_all_friendly_pieces {
+        let piece_type = match find_peice_at_from_location(board, from) {
+            Some(pt) => pt,
+            None => {
+                println!("No piece friendly found at '{}'", from);
+                continue;
+            } // No piece found at 'from'
+        };
+
+        let moves = match piece_type {
+            PieceType::Pawn => generate_pawn_moves(board, from),
+            PieceType::Knight => generate_knight_moves(board, from),
+            PieceType::Bishop => generate_bishop_moves(board, from),
+            PieceType::Rook => generate_rook_moves(board, from),
+            PieceType::Queen => generate_queen_moves(board, from),
+            PieceType::King => generate_king_moves(board, from),
+        };
+    }
+    return all_moves;
+}
+
+fn generate_pawn_moves(board: &Board, from: u8) -> Vec<Move> {
+    let mut moves = Vec::new();
+
+    return moves;
+}
+
+fn generate_knight_moves(board: &Board, from: u8) -> Vec<Move> {
+    let mut moves = Vec::new();
+
+    return moves;
+}
+
+fn generate_bishop_moves(board: &Board, from: u8) -> Vec<Move> {
+    let mut moves = Vec::new();
+
+    return moves;
+}
+
+fn generate_rook_moves(board: &Board, from: u8) -> Vec<Move> {
+    let mut moves = Vec::new();
+
+    return moves;
+}
+
+fn generate_queen_moves(board: &Board, from: u8) -> Vec<Move> {
+    let mut moves = Vec::new();
+
+    return moves;
+}
+
+fn generate_king_moves(board: &Board, from: u8) -> Vec<Move> {
+    let mut moves = Vec::new();
+
+    return moves;
+}
+fn convert_bitboards_to_indexs(bitboard: u64) -> Vec<u8> {
+    let mut indexes = Vec::new();
+
+    for i in 0..64 {
+        if (bitboard >> i) & 1 == 1 {
+            indexes.push(i as u8);
+        }
+    }
+
+    indexes
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1517,5 +1628,28 @@ mod tests {
             !valid,
             "White should not be able to castle from starting position"
         );
+    }
+
+    #[test]
+    fn test_en_pessant_working() {
+        let fen = "rnbqkbnr/1pp1pppp/8/p2pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq d6 0 1";
+
+        let valid = validate_move_helper(fen, "e5d6", true);
+
+        assert!(
+            valid,
+            "White pawn should be able to capture the black pawn via en pessant"
+        );
+    }
+
+    #[test]
+    fn test_en_pessant_invalid_when_not_possible_via_fen() {
+        let fen = "rnbqkbnr/1pp1pppp/8/p2pP3/8/8/PPPP1PPP/RNBQKBNR w KQkq - 0 1";
+
+        let valid = validate_move_helper(fen, "e5d6", false);
+
+        assert!(
+            !valid,
+            "White pawn should not be able to capture the black pawn via en pessant due to the FEN not indicating it's possible");
     }
 }

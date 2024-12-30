@@ -68,8 +68,8 @@ pub struct Board {
     11: Black King
      */
     pub active_color: Color,
-    pub castling_rights: u8,       // Use a bitmask for castling rights
-    pub en_passant: Option<usize>, // Target square index for en passant
+    pub castling_rights: u8,    // Use a bitmask for castling rights
+    pub en_passant: Option<u8>, // Target square index for en passant
     pub halfmove_clock: u32,
     pub fullmove_number: u32,
 }
@@ -239,8 +239,8 @@ impl Board {
 
         // 4) En passant
         let en_passant = if parts[3] != "-" {
-            let file = parts[3].chars().nth(0).unwrap() as usize - 'a' as usize;
-            let rank = parts[3].chars().nth(1).unwrap() as usize - '1' as usize;
+            let file = parts[3].chars().nth(0).unwrap() as u8 - 'a' as u8;
+            let rank = parts[3].chars().nth(1).unwrap() as u8 - '1' as u8;
             Some(rank * 8 + file)
         } else {
             None
@@ -341,19 +341,19 @@ impl Board {
     }
 
     /// Utility to print a 64-bit bitboard in an 8x8 grid to stdout.
-    pub fn display_bitboard(bitboard: u64) {
-        for i in (0..64).rev() {
-            if i % 8 == 7 {
-                println!();
-            }
-            if (bitboard & (1 << i)) != 0 {
-                print!("1");
-            } else {
-                print!("0");
-            }
-        }
-        println!();
-    }
+    // pub fn display_bitboard(bitboard: u64) {
+    //     for i in (0..64).rev() {
+    //         if i % 8 == 7 {
+    //             println!();
+    //         }
+    //         if (bitboard & (1 << i)) != 0 {
+    //             print!("1");
+    //         } else {
+    //             print!("0");
+    //         }
+    //     }
+    //     println!();
+    // }
 
     /// Convert this Board back into a FEN string. If you store squares
     /// from a1..h1 up to a8..h8, you have to be careful to output ranks
@@ -466,20 +466,43 @@ impl Board {
 
         if valid {
             // Update the board state
+
             // 1. Move the piece
+
+            // figure out what peice were moving
+            let peice_type = find_peice_at_from_location(self, m.from);
+
+            let peice_type = match peice_type {
+                Some(peice_type) => peice_type,
+                None => return false,
+            };
+
+            // en passant
+            if peice_type == PieceType::Pawn
+                && self.en_passant.is_some()
+                && m.to == self.en_passant.unwrap()
+            {
+                // remove the pawn that is being taken
+                let taken_peice_type = match self.active_color {
+                    Color::White => PieceType::Pawn,
+                    Color::Black => PieceType::Pawn,
+                };
+
+                let capture_bit = 1 << m.to - 8;
+                let taken_peice_type = taken_peice_type as usize
+                    + match self.active_color {
+                        Color::White => 6,
+                        Color::Black => 0,
+                    };
+
+                // remove the captured peice from the bitboard
+                self.bitboards[taken_peice_type] &= !capture_bit;
+            }
 
             // update the bitboards
             let enemy_bitboards = match self.active_color {
                 Color::White => &self.bitboards[6..12],
                 Color::Black => &self.bitboards[0..6],
-            };
-
-            // figure out what peice were moving
-            let peice_type = find_peice_at_from_location(self, &m);
-
-            let peice_type = match peice_type {
-                Some(peice_type) => peice_type,
-                None => return false,
             };
 
             // figure out if the piece is taking another piece
@@ -582,6 +605,11 @@ impl Board {
                 }
             }
             // 3. Update en passant
+            if peice_type == PieceType::Pawn && (m.from as i8 - m.to as i8).abs() == 16 {
+                self.en_passant = Some((m.from + m.to) / 2); // set the en passant target square to the square behind the pawn
+            } else {
+                self.en_passant = None;
+            }
             // 4. Update halfmove clock
             if peice_type == PieceType::Pawn || capture {
                 self.halfmove_clock = 0;
