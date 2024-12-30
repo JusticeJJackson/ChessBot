@@ -7,7 +7,7 @@ use crate::utils::convert_board_coordinate_to_idx;
 use crate::utils::EDGE_DISTANCES;
 
 // Uses UCI Notation
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Move {
     pub from: u8,                     // The index of the square the piece is moving from
     pub to: u8,                       // The index of the square the piece is moving to
@@ -100,6 +100,18 @@ fn validate_pawn_move(board: &Board, m: &Move) -> bool {
 
     // Check if the pawn is moving forward one or two squares
     let rank_diff = to_rank as i8 - from_rank as i8;
+
+    // Check to see if the pawn is promoting without moving to the last rank
+    if m.promotion.is_some() && to_rank != 0 && to_rank != 7 {
+        println!("Invalid move: Pawn promoting without moving to last rank");
+        return false;
+    }
+
+    // Check to see if the pawn is not promoting when moving to the last rank
+    if m.promotion.is_none() && (to_rank == 0 || to_rank == 7) {
+        println!("Invalid move: Pawn moving to last rank without promotion");
+        return false;
+    }
 
     if rank_diff != direction && rank_diff != 2 * direction {
         println!(
@@ -614,12 +626,156 @@ fn generate_all_moves_for_color(board: &Board) -> Vec<Move> {
             PieceType::Queen => generate_queen_moves(board, from),
             PieceType::King => generate_king_moves(board, from),
         };
+
+        all_moves.extend(moves);
     }
     return all_moves;
 }
 
 fn generate_pawn_moves(board: &Board, from: u8) -> Vec<Move> {
     let mut moves = Vec::new();
+
+    let color = board.active_color;
+
+    let direction: i8 = match color {
+        Color::White => 1,
+        Color::Black => -1,
+    };
+
+    let from_rank = from / 8;
+
+    let to_rank = (from_rank as i8 + direction) as u8;
+
+    let to: u8 = (from as i8 + (direction * 8)) as u8;
+
+    // verify that the pawn is not moving to a square that is occupied by a any piece
+    let valid_move_forward_one =
+        (board.all_black_bitboard | board.all_white_bitboard) & (1u64 << to) == 0;
+    if valid_move_forward_one {
+        // if we are moving to the last rank, we need to promote the pawn
+        if to_rank == 0 || to_rank == 7 {
+            let promotion = vec![
+                PieceType::Queen,
+                PieceType::Rook,
+                PieceType::Bishop,
+                PieceType::Knight,
+            ];
+            for p in promotion {
+                let move_forward_one = Move {
+                    from,
+                    to,
+                    promotion: Some(p),
+                };
+                moves.push(move_forward_one);
+            }
+        }
+        // else we are moving to a place that does not require promotion
+        else {
+            let move_forward_one = Move {
+                from,
+                to,
+                promotion: None,
+            };
+            // check to see if we are moving
+            moves.push(move_forward_one);
+        }
+    }
+
+    // if any only if the pawn can move, check to see if the pawn can move forward two
+    if valid_move_forward_one && from_rank == 1 && color == Color::White
+        || from_rank == 6 && color == Color::Black
+    {
+        let to = (from as i8 + ((2 * direction) * 8)) as u8; // Move two squares forward
+        if to_rank >= 0 && to_rank < 8 {
+            let move_forward_two = Move {
+                from,
+                to,
+                promotion: None,
+            };
+
+            // if we are moving to a valid position
+            if validate_move(board, &move_forward_two) {
+                moves.push(move_forward_two);
+            }
+        }
+    }
+
+    // check enemy occupancy bitboard to see if we can even attempt a capture
+
+    let enemy_bitboards = match color {
+        Color::White => &board.all_black_bitboard, // Last 6 bitboards for Black
+        Color::Black => &board.all_white_bitboard, // First 6 bitboards for White
+    };
+
+    // check to see if we can capture a piece diagonally
+    let left_diagonal = ((from as i8 + (direction * 8)) - 1) as u8;
+    let right_diagonal = ((from as i8 + (direction * 8)) + 1) as u8;
+
+    let left_diagonal_bit = 1u64 << left_diagonal;
+    let right_diagonal_bit = 1u64 << right_diagonal;
+
+    let left_diagonal_capture_possible = enemy_bitboards & left_diagonal_bit != 0;
+    let right_diagonal_capture_possible = enemy_bitboards & right_diagonal_bit != 0;
+
+    // check if left capture is valid
+    if left_diagonal_capture_possible {
+        // first check to see if we are about to capture the enemy king
+        let enemy_king_bitboard = match color {
+            Color::White => board.bitboards[5],  // Black king
+            Color::Black => board.bitboards[11], // White king
+        };
+
+        // ensure that we are not capturing the enemy king
+        if enemy_king_bitboard & left_diagonal_bit == 0 {
+            let left_diagonal_capture_move = Move {
+                from,
+                to: left_diagonal,
+                promotion: None,
+            };
+
+            moves.push(left_diagonal_capture_move);
+        }
+    }
+    // check en passant left
+    else if (board.en_passant.is_some()) && (left_diagonal == board.en_passant.unwrap()) {
+        let en_passant_left_move = Move {
+            from,
+            to: board.en_passant.unwrap(),
+            promotion: None,
+        };
+
+        moves.push(en_passant_left_move);
+    }
+
+    // check if right capture is valid
+    if right_diagonal_capture_possible {
+        // first check to see if we are about to capture the enemy king
+        let enemy_king_bitboard = match color {
+            Color::White => board.bitboards[5],  // Black king
+            Color::Black => board.bitboards[11], // White king
+        };
+
+        // ensure that we are not capturing the enemy king
+        if enemy_king_bitboard & right_diagonal_bit == 0 {
+            let right_diagonal_capture_move = Move {
+                from,
+                to: right_diagonal,
+                promotion: None,
+            };
+
+            moves.push(right_diagonal_capture_move);
+        }
+    }
+    // check en passant right
+    else if (board.en_passant.is_some()) && (right_diagonal == board.en_passant.unwrap()) {
+        let en_passant_right_move = Move {
+            from,
+            to: board.en_passant.unwrap(),
+            promotion: None,
+        };
+
+        moves.push(en_passant_right_move);
+    }
 
     return moves;
 }
@@ -1651,5 +1807,56 @@ mod tests {
         assert!(
             !valid,
             "White pawn should not be able to capture the black pawn via en pessant due to the FEN not indicating it's possible");
+    }
+
+    #[test]
+    fn test_generate_moves_for_single_white_pawn() {
+        let fen = "8/8/8/8/8/8/4P3/8 w - - 0 1";
+
+        let board = Board::fen_to_board(fen);
+
+        let moves = generate_pawn_moves(&board, 12);
+
+        dbg!(&moves);
+
+        let expected_moves = vec![
+            Move {
+                from: 12,
+                to: 20,
+                promotion: None,
+            },
+            Move {
+                from: 12,
+                to: 28,
+                promotion: None,
+            },
+        ];
+
+        assert_eq!(moves, expected_moves);
+    }
+
+    #[test]
+    fn test_generate_moves_for_single_pawn_with_en_pessant() {
+        let fen = "rnbqkbnr/ppp1pppp/8/3pP3/8/P7/1PPP1PPP/RNBQKBNR w KQkq d6 0 1";
+
+        let board = Board::fen_to_board(fen);
+
+        let moves = generate_pawn_moves(&board, 36);
+
+        dbg!(&moves);
+
+        let expected_moves = vec![
+            Move {
+                from: 36,
+                to: 44, // En pessant
+                promotion: None,
+            },
+            Move {
+                from: 36,
+                to: 43, // Move Forward
+                promotion: None,
+            },
+        ];
+        assert_eq!(moves, expected_moves)
     }
 }
