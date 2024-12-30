@@ -640,12 +640,18 @@ impl Board {
 
         match color {
             Color::White => {
-                attack_bitboard |= (pawn_bb << 7) & !0x0101010101010101; // Capture right
-                attack_bitboard |= (pawn_bb << 9) & !0x8080808080808080; // Capture left}
+                // Capture Right (East): Shift left by 9, exclude pawns on h-file
+                attack_bitboard |= (pawn_bb & !0x8080808080808080) << 9;
+
+                // Capture Left (West): Shift left by 7, exclude pawns on a-file
+                attack_bitboard |= (pawn_bb & !0x0101010101010101) << 7;
             }
             Color::Black => {
-                attack_bitboard |= (pawn_bb >> 7) & !0x8080808080808080; // Capture right
-                attack_bitboard |= (pawn_bb >> 9) & !0x0101010101010101; // Capture left
+                // Capture Right (West): Shift right by 9, exclude pawns on a-file
+                attack_bitboard |= (pawn_bb & !0x0101010101010101) >> 9;
+
+                // Capture Left (East): Shift right by 7, exclude pawns on h-file
+                attack_bitboard |= (pawn_bb & !0x8080808080808080) >> 7;
             }
         }
         attack_bitboard
@@ -709,19 +715,108 @@ impl Board {
     fn get_rook_attack_bitboard(rook_bb: u64, board_occpuancy_bb: u64) -> u64 {
         let mut attack_bitboard: u64 = 0;
 
+        // Define the distance offsets for Rook movement:
+        // [North, South, East, West]
+        let distance_to_jump: [i8; 4] = [8, -8, 1, -1];
+
+        // Match these directions to EDGE_DISTANCES indices:
+        // 0 = North, 1 = South, 2 = East, 3 = West
+        let dir: [u8; 4] = [0, 1, 2, 3];
+
+        for i in 0..4 {
+            let mut temp_bb = rook_bb;
+            // Loop over every bishop to evaluate which squares they can attack
+            while temp_bb != 0 {
+                let square = temp_bb.trailing_zeros() as i8; // get the index of the first set bit aka that one of the bishops is on
+                temp_bb &= temp_bb - 1; // remove the bit we just found
+
+                let max_distance = EDGE_DISTANCES[dir[i] as usize][square as usize];
+
+                for hop_distance_multiplier in 1..=max_distance {
+                    let hop_distance = distance_to_jump[i] * hop_distance_multiplier as i8;
+
+                    let attacking_square = square + hop_distance;
+
+                    // Prevents wrapping around the board or going out of bounds
+                    if attacking_square < 0 || attacking_square > 63 {
+                        break;
+                    }
+                    let attacking_square_u8 = attacking_square as u8;
+                    let attacking_bit = 1 << attacking_square_u8;
+
+                    attack_bitboard |= attacking_bit;
+
+                    // if we hit anny peice we stop
+                    if board_occpuancy_bb & attacking_bit != 0 {
+                        break;
+                    }
+                }
+            }
+        }
         attack_bitboard
     }
 
+    // just combine the boards of rook and bishop
     fn get_queen_attack_bitboard(queen_bb: u64, board_occpuancy_bb: u64) -> u64 {
+        return Self::get_bishop_attack_bitboard(queen_bb, board_occpuancy_bb)
+            | Self::get_rook_attack_bitboard(queen_bb, board_occpuancy_bb);
+    }
+
+    /// Given a bitboard of kings, returns a bitboard of squares they are attacking.
+    pub fn get_king_attack_bitboard(king_bb: u64) -> u64 {
         let mut attack_bitboard: u64 = 0;
+
+        // Define file masks to prevent wrapping
+        const FILE_A: u64 = 0x0101010101010101;
+        const FILE_H: u64 = 0x8080808080808080;
+
+        // Kings can move in eight directions: N, NE, E, SE, S, SW, W, NW
+        // Define each direction with its corresponding shift
+        // North (N): Shift left by 8
+        // South (S): Shift right by 8
+        // East (E): Shift left by 1, but exclude h-file
+        // West (W): Shift right by 1, but exclude a-file
+        // Northeast (NE): Shift left by 9, but exclude h-file
+        // Northwest (NW): Shift left by 7, but exclude a-file
+        // Southeast (SE): Shift right by 7, but exclude h-file
+        // Southwest (SW): Shift right by 9, but exclude a-file
+
+        // North
+        attack_bitboard |= king_bb << 8;
+
+        // South
+        attack_bitboard |= king_bb >> 8;
+
+        // East
+        attack_bitboard |= (king_bb & !FILE_H) << 1;
+
+        // West
+        attack_bitboard |= (king_bb & !FILE_A) >> 1;
+
+        // Northeast
+        attack_bitboard |= (king_bb & !FILE_H) << 9;
+
+        // Northwest
+        attack_bitboard |= (king_bb & !FILE_A) << 7;
+
+        // Southeast
+        attack_bitboard |= (king_bb & !FILE_H) >> 7;
+
+        // Southwest
+        attack_bitboard |= (king_bb & !FILE_A) >> 9;
 
         attack_bitboard
     }
 
-    fn get_king_attack_bitboard(king_bb: u64) -> u64 {
-        let mut attack_bitboard: u64 = 0;
+    pub fn is_in_check(self, color: Color) -> bool {
+        let king_bb = self.bitboards[color as usize * 6 + PieceType::King as usize];
 
-        attack_bitboard
+        let attack_bb = self.get_attack_bitboard_by_color(match color {
+            Color::White => Color::Black,
+            Color::Black => Color::White,
+        });
+
+        (king_bb & attack_bb) != 0
     }
 }
 
@@ -909,5 +1004,37 @@ mod tests {
         let expected_attack_bitboard: u64 = 1 << 61 | 1 << 63;
 
         assert_eq!(attack_bitboard, expected_attack_bitboard);
+    }
+
+    #[test]
+    fn test_pawn_attacking_bitboards_two_squares_overlapping() {
+        let fen = "8/4P1P1/8/8/8/8/8/8 b - - 0 1";
+
+        let board = Board::fen_to_board(&fen);
+
+        let attack_bitboard = board.get_attack_bitboard_by_color(Color::White);
+
+        let expected_attack_bitboard: u64 = 1 << 61 | 1 << 63 | 1 << 59;
+
+        assert_eq!(attack_bitboard, expected_attack_bitboard);
+    }
+
+    #[test]
+    fn test_if_black_king_in_check() {
+        let fen = "7k/8/8/8/8/2B5/8/8 w - - 0 1";
+
+        let board = Board::fen_to_board(&fen);
+
+        assert!(board.is_in_check(Color::Black));
+    }
+
+    #[test]
+    fn test_if_black_king_is_not_in_check_due_to_wrong_diagonal() {
+        let fen = "6k1/8/8/8/8/2B5/8/8 w - - 0 1";
+
+        let board = Board::fen_to_board(&fen);
+
+        // Assert we are not in check
+        assert!(!board.is_in_check(Color::Black));
     }
 }

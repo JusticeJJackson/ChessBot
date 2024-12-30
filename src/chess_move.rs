@@ -660,7 +660,7 @@ mod tests {
     #[test]
     fn test_validitiy_of_pawn_move_blocked() {
         let fen = "rnbqkbnr/pppppppp/8/8/8/4P3/PPPP1PPP/RNBQKBNR b KQkq - 0 1";
-        let m = Move::new("e3e4".to_string()); // Black pawn attempts to move from e3 to e4, but e4 is blocked by White pawn
+        // Black pawn attempts to move from e3 to e4, but e4 is blocked by White pawn
         let valid = validate_move_helper(fen, "e3e4", false);
         assert!(
             !valid,
@@ -819,7 +819,7 @@ mod tests {
     #[test]
     fn test_validitiy_of_pawn_move_edge_file_h() {
         let fen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBN1 w KQkq - 0 1"; // White pawn on h2
-        let m = Move::new("h2h4".to_string()); // Move two squares forward
+                                                                              // Move two squares forward
         let valid = validate_move_helper(fen, "h2h4", true);
         assert!(valid, "Pawn move from h2 to h4 on file 'h' should be valid");
     }
@@ -828,7 +828,7 @@ mod tests {
     #[test]
     fn test_validitiy_of_pawn_capture_forward_invalid() {
         let fen = "rnbqkbnr/pppp1ppp/8/8/4p3/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"; // Black pawn on e4
-        let m = Move::new("d2e3".to_string()); // White pawn on d2 attempts to capture forward to e3, but e3 is empty
+                                                                                // White pawn on d2 attempts to capture forward to e3, but e3 is empty
         let valid = validate_move_helper(fen, "d2e3", false);
         assert!(
             !valid,
