@@ -1,3 +1,4 @@
+use std::ops::BitOrAssign;
 use std::thread::available_parallelism;
 
 use crate::board::Board;
@@ -249,7 +250,7 @@ fn validate_bishop_move(board: &Board, m: &Move) -> bool {
         return false;
     }
 
-    let moves = generate_sliding_moves(board, PieceType::Bishop, m);
+    let moves = generate_sliding_moves(board, PieceType::Bishop, m.from);
 
     let to_bit = 1u64 << m.to;
     if moves & to_bit == 0 {
@@ -258,7 +259,6 @@ fn validate_bishop_move(board: &Board, m: &Move) -> bool {
             m.to
         );
 
-        println!("{:?}", moves);
         return false;
     }
 
@@ -273,7 +273,7 @@ fn validate_rook_move(board: &Board, m: &Move) -> bool {
         return false;
     }
 
-    let moves = generate_sliding_moves(board, PieceType::Rook, m);
+    let moves = generate_sliding_moves(board, PieceType::Rook, m.from);
 
     let to_bit = 1u64 << m.to;
     if moves & to_bit == 0 {
@@ -295,7 +295,7 @@ fn validate_queen_move(board: &Board, m: &Move) -> bool {
         return false;
     }
 
-    let moves = generate_sliding_moves(board, PieceType::Queen, m);
+    let moves = generate_sliding_moves(board, PieceType::Queen, m.from);
 
     let to_bit = 1u64 << m.to;
     if moves & to_bit == 0 {
@@ -419,7 +419,7 @@ fn validate_queen_side_castle(board: &Board, color: Color) -> bool {
     true
 }
 
-pub fn generate_sliding_moves(board: &Board, piece_type: PieceType, m: &Move) -> u64 {
+pub fn generate_sliding_moves(board: &Board, piece_type: PieceType, from: u8) -> u64 {
     let mut moves = 0;
 
     let capturable_bitboards: &[u64] = match board.active_color {
@@ -445,13 +445,13 @@ pub fn generate_sliding_moves(board: &Board, piece_type: PieceType, m: &Move) ->
             // for each direction [NE, NW, SE, SW]
             for i in 0..4 {
                 // get the max distance to the edge of the board for that given direction
-                let max_distance = EDGE_DISTANCES[dir[i] as usize][m.from as usize];
+                let max_distance = EDGE_DISTANCES[dir[i] as usize][from as usize];
 
                 // for each square in that direction jumping by the distance to the edge
                 for hop_distance_multiplier in 1..=max_distance {
                     let hop_distance = distance_to_jump[i] * hop_distance_multiplier as i8;
 
-                    let to: u8 = ((m.from as i8) + hop_distance) as u8;
+                    let to: u8 = ((from as i8) + hop_distance) as u8;
                     let to_bit: u64 = 1u64 << to;
                     // if the square is occupied by a friendly piece or the enemy king, stop
                     if friendly_bitboard & to_bit != 0 || enemy_king_bitboard & to_bit != 0 {
@@ -481,13 +481,13 @@ pub fn generate_sliding_moves(board: &Board, piece_type: PieceType, m: &Move) ->
             // For each direction, move along that line until blocked or edge is reached.
             for i in 0..4 {
                 // Get max squares available in this direction from the current square
-                let max_distance = EDGE_DISTANCES[dir[i] as usize][m.from as usize];
+                let max_distance = EDGE_DISTANCES[dir[i] as usize][from as usize];
 
                 // Move up to `max_distance` squares in this direction
                 for hop_distance_multiplier in 1..=max_distance {
                     let hop_distance = distance_to_jump[i] * hop_distance_multiplier as i8;
 
-                    let to: i8 = m.from as i8 + hop_distance;
+                    let to: i8 = from as i8 + hop_distance;
                     // If we go out of the 0..63 range, stop
                     if to < 0 || to >= 64 {
                         break;
@@ -516,8 +516,8 @@ pub fn generate_sliding_moves(board: &Board, piece_type: PieceType, m: &Move) ->
         }
         PieceType::Queen => {
             // Combine Rook and Bishop moves for the Queen
-            moves |= generate_sliding_moves(board, PieceType::Rook, m);
-            moves |= generate_sliding_moves(board, PieceType::Bishop, m);
+            moves |= generate_sliding_moves(board, PieceType::Rook, from);
+            moves |= generate_sliding_moves(board, PieceType::Bishop, from);
         }
         _ => {
             println!("Invalid piece type for sliding move generation");
@@ -540,7 +540,7 @@ pub fn find_peice_at_from_location(board: &Board, from: u8) -> Option<PieceType>
     // Find the index of the bitboard that has the 'from' bit set
     let piecetype_at_from_idx = bitboards.iter().position(|&bb| bb & from_bit != 0);
 
-    dbg!("{:?}", piecetype_at_from_idx);
+    // dbg!("{:?}", piecetype_at_from_idx);
     // If no piece is found at the 'from' square, the move is invalid
     let piece_type = match piecetype_at_from_idx {
         Some(idx) => match board.active_color {
@@ -597,6 +597,30 @@ fn validate_to_location(board: &Board, m: &Move) -> bool {
     }
 
     return (!friendly_piece_at_to) && (!enemy_king_at_to);
+}
+
+// only ran if and only if the king is in check
+pub fn is_in_checkmate(board: &Board) -> bool {
+    // Generate all possible moves for the current player
+    let all_moves = generate_all_moves_for_color(board);
+
+    // for every move, clone the board and play the move, then check if the king is still in check
+    for m in all_moves {
+        let mut board_clone = board.clone();
+        // play move and check if its in check
+
+        //TODO: DELETE ME
+        let m_copy = m.clone();
+        let did_move_work = board_clone.move_peice(m);
+
+        // if its not in check, that means there is a possible move to get out of check
+        if did_move_work {
+            println!("Move: {:?} worked", m_copy);
+            return false;
+        }
+    }
+
+    true
 }
 
 fn generate_all_moves_for_color(board: &Board) -> Vec<Move> {
@@ -783,11 +807,73 @@ fn generate_pawn_moves(board: &Board, from: u8) -> Vec<Move> {
 fn generate_knight_moves(board: &Board, from: u8) -> Vec<Move> {
     let mut moves = Vec::new();
 
+    let color = board.active_color;
+
+    let from_rank = from / 8;
+    let from_file = from % 8;
+
+    let directions: [(i8, i8); 8] = [
+        (2, 1),
+        (1, 2),
+        (-1, 2),
+        (-2, 1),
+        (-2, -1),
+        (-1, -2),
+        (1, -2),
+        (2, -1),
+    ];
+
+    let friendly_bitboard: u64 = match color {
+        Color::White => board.all_white_bitboard, // First 6 bitboards for White
+        Color::Black => board.all_black_bitboard, // Last 6 bitboards for Black
+    };
+
+    let enemy_king_bitboard = match color {
+        Color::White => board.bitboards[11], // Black king
+        Color::Black => board.bitboards[5],  // White king
+    };
+
+    for (rank_diff, file_diff) in directions.iter() {
+        let to_rank = from_rank as i8 + rank_diff;
+        let to_file = from_file as i8 + file_diff;
+
+        // out of bounds check
+        if to_rank < 0 || to_rank >= 8 || to_file < 0 || to_file >= 8 {
+            continue;
+        }
+
+        let to = ((to_rank * 8) + to_file) as u8;
+        let to_bit = 1u64 << to;
+
+        // If the square is occupied by a friendly piece or the enemy king, skip
+        if friendly_bitboard & to_bit != 0 || enemy_king_bitboard & to_bit != 0 {
+            continue;
+        }
+
+        moves.push(Move {
+            from,
+            to,
+            promotion: None,
+        });
+    }
     return moves;
 }
 
 fn generate_bishop_moves(board: &Board, from: u8) -> Vec<Move> {
     let mut moves = Vec::new();
+
+    let mut bishop_moves_bitboard = generate_sliding_moves(board, PieceType::Bishop, from);
+
+    while bishop_moves_bitboard != 0 {
+        let to = bishop_moves_bitboard.trailing_zeros() as u8;
+        moves.push(Move {
+            from,
+            to,
+            promotion: None,
+        });
+
+        bishop_moves_bitboard &= bishop_moves_bitboard - 1;
+    }
 
     return moves;
 }
@@ -795,17 +881,166 @@ fn generate_bishop_moves(board: &Board, from: u8) -> Vec<Move> {
 fn generate_rook_moves(board: &Board, from: u8) -> Vec<Move> {
     let mut moves = Vec::new();
 
+    let mut rook_moves_bitboard = generate_sliding_moves(board, PieceType::Rook, from);
+
+    while rook_moves_bitboard != 0 {
+        let to = rook_moves_bitboard.trailing_zeros() as u8;
+        moves.push(Move {
+            from,
+            to,
+            promotion: None,
+        });
+
+        rook_moves_bitboard &= rook_moves_bitboard - 1;
+    }
     return moves;
 }
 
 fn generate_queen_moves(board: &Board, from: u8) -> Vec<Move> {
     let mut moves = Vec::new();
+    let mut queen_moves_bitboard = generate_sliding_moves(board, PieceType::Queen, from);
 
+    while queen_moves_bitboard != 0 {
+        let to = queen_moves_bitboard.trailing_zeros() as u8;
+        moves.push(Move {
+            from,
+            to,
+            promotion: None,
+        });
+
+        queen_moves_bitboard &= queen_moves_bitboard - 1;
+    }
     return moves;
 }
 
 fn generate_king_moves(board: &Board, from: u8) -> Vec<Move> {
     let mut moves = Vec::new();
+
+    // 1. generate all moves for the king, then filter out the invalid moves (puts king in check)
+    let dir: [i32; 8] = [-9, -8, -7, -1, 1, 7, 8, 9];
+
+    let enemy_king_bitboard = match board.active_color {
+        Color::White => board.bitboards[5],  // Black king
+        Color::Black => board.bitboards[11], // White king
+    };
+
+    for direction in dir {
+        let to = (from as i32 + direction) as u8;
+
+        // out of bounds check
+        if to < 0 || to >= 64 {
+            continue;
+        }
+
+        let to_bit = 1u64 << to;
+
+        // If the square is occupied by a friendly piece or the enemy king, skip
+        if board.all_white_bitboard & to_bit != 0 || enemy_king_bitboard & to_bit != 0 {
+            continue;
+        }
+
+        // If the move puts the king in check, skip
+        let mut board_copy = board.clone();
+        let m = Move {
+            from,
+            to,
+            promotion: None,
+        };
+        board_copy.move_peice(m);
+        // invert the color as we moved and the turn has changed
+        if board_copy.is_in_check(match board.active_color {
+            Color::White => Color::Black,
+            Color::Black => Color::White,
+        }) {
+            continue;
+        }
+
+        moves.push(Move {
+            from,
+            to,
+            promotion: None,
+        });
+    }
+
+    let all_occupied = board.all_white_bitboard | board.all_black_bitboard;
+    // 2. check for castling moves
+    let rights = board.castling_rights;
+
+    let king_side_number_to_check = match board.active_color {
+        Color::White => 1,
+        Color::Black => 4,
+    };
+
+    let queen_side_number_to_check = match board.active_color {
+        Color::White => 2,
+        Color::Black => 8,
+    };
+
+    // kingside castle check
+    if rights & king_side_number_to_check != 0 {
+        // check to see if the squares between the king and rook are empty
+        let king_side_squares_to_check = match board.active_color {
+            Color::White => [5, 6],
+            Color::Black => [61, 62],
+        };
+
+        let mut can_castle_king_side = true;
+
+        for square in king_side_squares_to_check.iter() {
+            let square_bit = 1u64 << *square;
+
+            // if square is occupied, we cannot castle
+            if all_occupied & square_bit != 0 {
+                can_castle_king_side = false;
+                break;
+            }
+        }
+
+        if can_castle_king_side {
+            let king_side_castle = Move {
+                from,
+                to: match board.active_color {
+                    Color::White => 6,
+                    Color::Black => 62,
+                },
+                promotion: None,
+            };
+
+            moves.push(king_side_castle);
+        }
+    }
+
+    if rights & queen_side_number_to_check != 0 {
+        let queen_side_squares_to_check = match board.active_color {
+            Color::White => [3, 2, 1],
+            Color::Black => [59, 58, 57],
+        };
+
+        let mut can_castle_queen_side = true;
+
+        for square in queen_side_squares_to_check.iter() {
+            let square_bit = 1u64 << *square;
+
+            // if square is occupied, we cannot castle
+            if all_occupied & square_bit != 0 {
+                can_castle_queen_side = false;
+                break;
+            }
+        }
+
+        if can_castle_queen_side {
+            let queen_side_castle = Move {
+                from,
+                to: match board.active_color {
+                    Color::White => 2,
+                    Color::Black => 58,
+                },
+                promotion: None,
+            };
+
+            moves.push(queen_side_castle);
+        }
+    }
 
     return moves;
 }
@@ -820,6 +1055,7 @@ fn convert_bitboards_to_indexs(bitboard: u64) -> Vec<u8> {
 
     indexes
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1817,7 +2053,7 @@ mod tests {
 
         let moves = generate_pawn_moves(&board, 12);
 
-        dbg!(&moves);
+        // dbg!(&moves);
 
         let expected_moves = vec![
             Move {
@@ -1843,7 +2079,7 @@ mod tests {
 
         let moves = generate_pawn_moves(&board, 36);
 
-        dbg!(&moves);
+        // dbg!(&moves);
 
         let expected_moves = vec![
             Move {
@@ -1858,5 +2094,49 @@ mod tests {
             },
         ];
         assert_eq!(moves, expected_moves)
+    }
+
+    #[test]
+    fn test_generate_moves_for_knight() {
+        let fen = "8/8/8/8/3N4/8/8/8 w - - 0 1";
+
+        let board = Board::fen_to_board(fen);
+
+        let moves = generate_knight_moves(&board, 27);
+
+        // dbg!(&moves);
+
+        assert_eq!(moves.len(), 8);
+    }
+
+    #[test]
+    fn test_generate_moves_for_knight_on_edge() {
+        let fen = "8/8/8/7N/8/8/8/8 w - - 0 1";
+
+        let board = Board::fen_to_board(fen);
+
+        let moves = generate_knight_moves(&board, 39);
+
+        // dbg!(&moves);
+
+        assert_eq!(moves.len(), 4);
+    }
+
+    #[test]
+    fn test_queen_in_checkmate() {
+        let fen = "q5K1/r7/8/8/8/8/8/8 w - - 0 1";
+
+        let board = Board::fen_to_board(fen);
+
+        assert!(is_in_checkmate(&board));
+    }
+
+    #[test]
+    fn test_queen_in_checkmate_all_pawns() {
+        let fen = "8/8/8/8/8/5pp1/5pp1/7K w - - 0 1";
+
+        let board = Board::fen_to_board(fen);
+
+        assert!(is_in_checkmate(&board));
     }
 }

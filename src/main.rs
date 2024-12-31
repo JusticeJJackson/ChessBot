@@ -1,5 +1,5 @@
-use board::Board;
-use chess_move::{validate_move, Move};
+use board::{Board, Color};
+use chess_move::{is_in_checkmate, validate_move, Move};
 use std::io::{self, Write};
 
 mod board;
@@ -46,7 +46,24 @@ fn main() {
 
         game_board.move_peice(m);
 
+        if game_board.is_in_check(match game_board.active_color {
+            Color::White => Color::Black,
+            Color::Black => Color::White,
+        }) {
+            println!("Check!");
+
+            if is_in_checkmate(&game_board) {
+                println!("Checkmate!");
+                break;
+            }
+        }
+
         print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
         game_board.display();
     }
 }
+
+//TODO
+/*
+Stalemate detection
+ */

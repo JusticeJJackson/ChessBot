@@ -48,6 +48,7 @@ enum Square {
     Piece(Piece),
 }
 
+#[derive(Debug, Clone, Copy)]
 pub struct Board {
     pub bitboards: [u64; 12],
     //TODO add white and black occupancy bitboards
@@ -464,6 +465,7 @@ impl Board {
     pub fn move_peice(&mut self, m: Move) -> bool {
         let valid = validate_move(self, &m);
 
+        let prev_board_state = self.clone();
         if valid {
             // Update the board state
 
@@ -570,6 +572,13 @@ impl Board {
                 Color::White => self.all_white_bitboard |= 1 << m.to,
                 Color::Black => self.all_black_bitboard |= 1 << m.to,
             }
+
+            // check to see if move puts the king in check or king is still in check
+            if self.is_in_check(self.active_color) {
+                *self = prev_board_state;
+                return false;
+            }
+            self.display();
             // 2. Update castling rights
             if peice_type == PieceType::King {
                 match m.from {
@@ -640,6 +649,7 @@ impl Board {
         };
 
         let pawns_bb = self.bitboards[offset + PieceType::Pawn as usize];
+
         let knights_bb = self.bitboards[offset + PieceType::Knight as usize];
         let bishops_bb = self.bitboards[offset + PieceType::Bishop as usize];
         let rooks_bb = self.bitboards[offset + PieceType::Rook as usize];
@@ -647,7 +657,6 @@ impl Board {
         let king_bb = self.bitboards[offset + PieceType::King as usize];
 
         let board_occupancy_bb = self.all_white_bitboard | self.all_black_bitboard;
-
         attack_bitboard |= Self::get_pawn_attack_bitboard(pawns_bb, color);
 
         attack_bitboard |= Self::get_knight_attack_bitboard(knights_bb);
@@ -675,11 +684,11 @@ impl Board {
                 attack_bitboard |= (pawn_bb & !0x0101010101010101) << 7;
             }
             Color::Black => {
-                // Capture Right (West): Shift right by 9, exclude pawns on a-file
-                attack_bitboard |= (pawn_bb & !0x0101010101010101) >> 9;
+                // capturing left => i -> i - 9, exclude h-file
+                attack_bitboard |= (pawn_bb & !0x8080808080808080) >> 9;
 
-                // Capture Left (East): Shift right by 7, exclude pawns on h-file
-                attack_bitboard |= (pawn_bb & !0x8080808080808080) >> 7;
+                // capturing right => i -> i - 7, exclude a-file
+                attack_bitboard |= (pawn_bb & !0x0101010101010101) >> 7;
             }
         }
         attack_bitboard
@@ -1064,5 +1073,14 @@ mod tests {
 
         // Assert we are not in check
         assert!(!board.is_in_check(Color::Black));
+    }
+
+    #[test]
+    fn test_if_white_queen_in_check() {
+        let fen = "8/8/8/8/8/5pp1/5pp1/7K w - - 0 1";
+
+        let board = Board::fen_to_board(&fen);
+
+        assert!(board.is_in_check(Color::White));
     }
 }
