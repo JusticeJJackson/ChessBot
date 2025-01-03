@@ -58,6 +58,14 @@ fn main() {
             }
         }
 
+        if utils::is_stalemate(&game_board, match game_board.active_color {
+            Color::White => Color::Black,
+            Color::Black => Color::White,
+        }) {
+            println!("Game Over - Stalemate!");
+            break;
+        }
+
         print!("{esc}[2J{esc}[1;1H", esc = 27 as char);
         game_board.display();
     }

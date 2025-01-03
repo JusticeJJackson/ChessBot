@@ -1,10 +1,22 @@
 use crate::chess_move::{find_peice_at_from_location, validate_move, Move};
 use crate::utils::EDGE_DISTANCES;
+use std::ops::Not;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Color {
-    White = 0,
-    Black = 1,
+    White,
+    Black,
+}
+
+impl Not for Color {
+    type Output = Color;
+
+    fn not(self) -> Self::Output {
+        match self {
+            Color::White => Color::Black,
+            Color::Black => Color::White,
+        }
+    }
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -854,6 +866,36 @@ impl Board {
         });
 
         (king_bb & attack_bb) != 0
+    }
+
+    pub fn is_insufficient_material(&self) -> bool {
+        // Only kings left
+        if self.all_white_bitboard.count_ones() == 1 && self.all_black_bitboard.count_ones() == 1 {
+            return true;
+        }
+
+        // King and bishop/knight vs king
+        if (self.all_white_bitboard.count_ones() == 2 && self.all_black_bitboard.count_ones() == 1) ||
+           (self.all_white_bitboard.count_ones() == 1 && self.all_black_bitboard.count_ones() == 2) {
+            let minor_pieces = self.bitboards[PieceType::Bishop as usize] | 
+                             self.bitboards[PieceType::Knight as usize] |
+                             self.bitboards[(PieceType::Bishop as usize) + 6] | 
+                             self.bitboards[(PieceType::Knight as usize) + 6];
+            if minor_pieces.count_ones() == 1 {
+                return true;
+            }
+        }
+
+        false
+    }
+
+    pub fn is_50_move_rule(&self) -> bool {
+        self.halfmove_clock >= 50
+    }
+
+    pub fn is_3_fold_repetition(&self) -> bool {
+        // TODO: Implement position history tracking for 3-fold repetition
+        false
     }
 }
 
