@@ -302,7 +302,9 @@ impl Board {
         ];
 
         // row 7 is top (rank 8) in typical text display, row 0 is bottom (rank 1)
+        println!("  a b c d e f g h");
         for rank in (0..8).rev() {
+            print!("{} ", rank + 1);
             for file in 0..8 {
                 let sq_index = rank * 8 + file;
                 let mut ch = '*';
@@ -314,8 +316,9 @@ impl Board {
                 }
                 print!("{} ", ch);
             }
-            println!();
+            println!("{}", rank + 1);
         }
+        println!("  a b c d e f g h");
         println!("Active Color: {:?}", self.active_color);
         println!(
             "Castling Rights: {}{}{}{}",
