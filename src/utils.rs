@@ -77,13 +77,6 @@ pub fn is_stalemate(board: &Board, side_to_move: Color) -> bool {
         return true;
     }
 
-    // Check if any of the moves are valid
-    for m in moves {
-        if validate_move(board, &m) {
-            return false;
-        }
-    }
-
     // check if insufficient material
     if board.is_insufficient_material() {
         return true;
