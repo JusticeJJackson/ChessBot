@@ -345,8 +345,7 @@ fn validate_king_move(board: &Board, m: &Move) -> bool {
         println!("Invalid move: King moving more than one square away");
         return false;
     }
-
-    true
+    true  // Remove the king_moves increment from here
 }
 
 fn validate_king_side_castle(board: &Board, color: Color) -> bool {

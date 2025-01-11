@@ -1,5 +1,6 @@
 use crate::chess_move::{find_peice_at_from_location, validate_move, Move};
 use crate::utils::EDGE_DISTANCES;
+
 use std::ops::Not;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
@@ -63,7 +64,6 @@ enum Square {
 #[derive(Debug, Clone, Copy)]
 pub struct Board {
     pub bitboards: [u64; 12],
-    //TODO add white and black occupancy bitboards
     pub all_white_bitboard: u64,
     pub all_black_bitboard: u64,
     /*
@@ -85,6 +85,9 @@ pub struct Board {
     pub en_passant: Option<u8>, // Target square index for en passant
     pub halfmove_clock: u32,
     pub fullmove_number: u32,
+    pub king_moves: u32,
+    pub position_count: u8,  // Track how many positions we've stored
+    pub hashed_board_states: [u64; 100], // Store up to 100 previous positions as hashes
 }
 
 impl Board {
@@ -290,6 +293,9 @@ impl Board {
             fullmove_number,
             all_white_bitboard: all_white_bitboard,
             all_black_bitboard: all_black_bitboard,
+            king_moves: 0,
+            position_count: 0,
+            hashed_board_states: [0; 100],
         }
     }
 
@@ -479,6 +485,19 @@ impl Board {
 
     pub fn move_peice(&mut self, m: Move) -> bool {
         let valid = validate_move(self, &m);
+        if !valid {
+            return false;
+        }
+
+        // If it's a king move, increment the counter
+        if let Some(piece_type) = find_peice_at_from_location(self, m.from) {
+            if piece_type == PieceType::King {
+                self.king_moves += 1;
+            }
+        }
+        else {
+            self.king_moves = 0;
+        }
 
         let prev_board_state = self.clone();
         if valid {
@@ -493,6 +512,11 @@ impl Board {
                 Some(peice_type) => peice_type,
                 None => return false,
             };
+
+            if peice_type == PieceType::Pawn {
+                self.hashed_board_states = [0; 100];
+                self.position_count = 0;
+            }
 
             // en passant
             if peice_type == PieceType::Pawn
@@ -529,6 +553,9 @@ impl Board {
             };
 
             if capture {
+                // clear the hash
+                self.hashed_board_states = [0; 100];
+                self.position_count = 0;
                 // find what kind of peice we are taking
                 let to_bit = 1 << m.to;
                 let taken_peice_type = enemy_bitboards.iter().position(|&bb| bb & to_bit != 0);
@@ -649,6 +676,13 @@ impl Board {
                 Color::White => Color::Black,
                 Color::Black => Color::White,
             };
+        }
+
+        // Update position history
+        let position_hash = self.calculate_position_hash();
+        if self.position_count < 100 {
+            self.hashed_board_states[self.position_count as usize] = position_hash;
+            self.position_count += 1;
         }
 
         valid
@@ -893,12 +927,52 @@ impl Board {
     }
 
     pub fn is_50_move_rule(&self) -> bool {
-        self.halfmove_clock >= 50
+        self.king_moves >= 50
     }
 
     pub fn is_3_fold_repetition(&self) -> bool {
-        // TODO: Implement position history tracking for 3-fold repetition
+        if self.position_count < 3 {
+            return false;
+        }
+
+        let current_hash = self.calculate_position_hash();
+        let mut repetition_count = 0;
+
+        for i in 0..self.position_count {
+            if self.hashed_board_states[i as usize] == current_hash {
+                repetition_count += 1;
+                if repetition_count >= 3 {
+                    return true;
+                }
+            }
+        }
+
         false
+    }
+
+    fn calculate_position_hash(&self) -> u64 {
+        // Simple Zobrist-style hashing
+        let mut hash: u64 = 0;
+        
+        // Hash piece positions
+        for i in 0..12 {
+            hash ^= self.bitboards[i];
+        }
+        
+        // Hash castling rights
+        hash ^= self.castling_rights as u64;
+        
+        // Hash en passant
+        if let Some(ep) = self.en_passant {
+            hash ^= ep as u64;
+        }
+        
+        // Hash active color
+        if self.active_color == Color::Black {
+            hash ^= 1u64 << 63;  // Flip the top bit for black
+        }
+        
+        hash
     }
 }
 
