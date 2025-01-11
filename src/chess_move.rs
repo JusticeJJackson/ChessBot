@@ -1,9 +1,4 @@
-use std::ops::BitOrAssign;
-use std::thread::available_parallelism;
-
-use crate::board::Board;
-use crate::board::Color;
-use crate::board::PieceType;
+use crate::board::{Board, Color, PieceType};
 use crate::utils::convert_board_coordinate_to_idx;
 use crate::utils::EDGE_DISTANCES;
 
@@ -25,6 +20,14 @@ impl Move {
             None
         };
 
+        Move {
+            from,
+            to,
+            promotion,
+        }
+    }
+
+    pub fn new_from_indices(from: u8, to: u8, promotion: Option<PieceType>) -> Move {
         Move {
             from,
             to,
@@ -342,8 +345,7 @@ fn validate_king_move(board: &Board, m: &Move) -> bool {
         println!("Invalid move: King moving more than one square away");
         return false;
     }
-
-    true
+    true  // Remove the king_moves increment from here
 }
 
 fn validate_king_side_castle(board: &Board, color: Color) -> bool {
@@ -623,7 +625,7 @@ pub fn is_in_checkmate(board: &Board) -> bool {
     true
 }
 
-fn generate_all_moves_for_color(board: &Board) -> Vec<Move> {
+pub fn generate_all_moves_for_color(board: &Board) -> Vec<Move> {
     let mut all_moves = Vec::new();
 
     let bitboards: &u64 = match board.active_color {
@@ -710,7 +712,7 @@ fn generate_pawn_moves(board: &Board, from: u8) -> Vec<Move> {
         || from_rank == 6 && color == Color::Black
     {
         let to = (from as i8 + ((2 * direction) * 8)) as u8; // Move two squares forward
-        if to_rank >= 0 && to_rank < 8 {
+        if to_rank < 8 {
             let move_forward_two = Move {
                 from,
                 to,
@@ -928,7 +930,7 @@ fn generate_king_moves(board: &Board, from: u8) -> Vec<Move> {
         let to = (from as i32 + direction) as u8;
 
         // out of bounds check
-        if to < 0 || to >= 64 {
+        if to >= 64 {
             continue;
         }
 
@@ -2139,4 +2141,63 @@ mod tests {
 
         assert!(is_in_checkmate(&board));
     }
+
+    #[test]
+    fn test_king_alone_stalemate() {
+        let fen = "8/8/4k3/1r6/8/8/4r3/K7 w - - 0 1";
+        let board = Board::fen_to_board(fen);
+        
+        // Black king is not in check but has no legal moves
+        assert!(!board.is_in_check(Color::Black));
+        assert!(is_in_stalemate(&board));
+    }
+
+    #[test]
+    fn test_not_stalemate_with_legal_moves() {
+        let fen = "8/8/4k3/1r6/8/4r3/8/K7 w - - 0 1";
+        let board = Board::fen_to_board(fen);
+        
+        // Black king has legal moves available
+        assert!(!is_in_stalemate(&board));
+    }
+
+    #[test]
+    fn test_stalemate_with_blocked_pawns() {
+        let fen = "8/8/4k3/1r6/7p/7P/4r3/K7 w - - 0 1";
+        let board = Board::fen_to_board(fen);
+        
+        // Black's king and pawn are blocked, with no legal moves
+        assert!(is_in_stalemate(&board));
+    }
+
+    #[test]
+    fn test_stalemate_with_multiple_pieces() {
+        // This is a real stalemate position where Black has no legal moves
+        let fen = "7k/5K2/6Q1/8/8/8/8/8 b - - 0 1";
+        let board = Board::fen_to_board(fen);
+        
+        // Black king is not in check but has no legal moves
+        assert!(!board.is_in_check(Color::Black));
+        assert!(is_in_stalemate(&board));
+    }
+}
+
+pub fn is_in_stalemate(board: &Board) -> bool {
+    // If the king is in check, it's not stalemate
+    if board.is_in_check(board.active_color) {
+        return false;
+    }
+
+    // Generate all possible moves for the current player
+    let all_moves = generate_all_moves_for_color(board);
+
+    // If there are no legal moves and the king is not in check, it's stalemate
+    for m in all_moves {
+        let mut board_clone = board.clone();
+        if board_clone.move_peice(m) {
+            return false;
+        }
+    }
+
+    true
 }

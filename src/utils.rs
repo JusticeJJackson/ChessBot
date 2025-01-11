@@ -1,4 +1,6 @@
 use once_cell::sync::Lazy;
+use crate::board::{Board, Color};
+use crate::chess_move::{validate_move, generate_all_moves_for_color};
 
 pub fn convert_board_coordinate_to_idx(board_coordinate: String) -> u8 {
     let mut board_coordinate = board_coordinate.chars();
@@ -61,3 +63,35 @@ pub static EDGE_DISTANCES: Lazy<[Vec<u8>; 8]> = Lazy::new(|| {
         north, south, east, west, north_east, north_west, south_east, south_west,
     ]
 });
+
+pub fn is_stalemate(board: &Board, side_to_move: Color) -> bool {
+    // If the king is in check, it's not stalemate
+    if board.is_in_check(side_to_move) {
+        return false;
+    }
+
+    // Check if there are any legal moves
+    // Generate all possible moves for the side to move
+    let moves = generate_all_moves_for_color(board);
+    if moves.is_empty() {
+        return true;
+    }
+
+    // check if insufficient material
+    if board.is_insufficient_material() {
+        return true;
+    }
+
+    // check if 50 move rule
+    if board.is_50_move_rule() {
+        return true;
+    }
+
+    // check if 3-fold repetition
+    if board.is_3_fold_repetition() {
+        return true;
+    }
+
+    // If we get here, there are no legal moves
+    true
+}
